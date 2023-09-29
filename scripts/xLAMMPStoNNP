@@ -1,0 +1,207 @@
+#!/usr/local/bin/python3
+
+"""
+Get all LAMMPS structures within a `tests/` folder, and gather them in `stock.data`
+"""
+
+from generatorfunctions import *
+import glob
+import argparse
+from ase.io.lammpsrun import read_lammps_dump
+import os
+import numpy as np
+import pathlib
+
+boldorange = "\033[93m\033[1m"
+orange = "\033[93m"
+normal = "\033[0m"
+
+def flatten(xss):
+    """Flatten a list of lists into a single list."""
+    return np.array([x for xs in xss for x in xs])
+
+
+def write_nnp(fname, atoms, comment):
+    """Write a list of Atom structures in NNP input format"""
+    with open(fname, 'a') as f:
+        a,b,c = atoms.get_cell()/0.52917721 # convert Å to Bohr
+        f.write("begin\n")
+        f.write(f"comment {comment}\n")
+        f.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
+        f.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
+        f.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
+        for at,pos in zip(atoms.get_chemical_symbols(), atoms.positions):
+            x,y,z = pos/0.52917721 # convert Å to Bohr
+            f.write(f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {0:22.14e} {0:22.14e} {0:22.14e}\n")
+        f.write(f"energy {0:22.14e}\n")
+        f.write(f"charge {'0':s}\n")
+        f.write("end\n")
+
+
+def main(args):
+    coef    = args.coef
+    folders = args.folders
+    pattern = args.pattern
+    Rmin    = args.Rmin
+    last    = args.last
+    Nmax    = args.Nmax
+    destination = args.destination
+    append = args.append
+    ReadMax = args.ReadMax
+    
+    if append==False:
+        os.system(f"rm -f {destination}/stock.data")
+        os.system(f"rm -f {destination}/EW.data")
+    
+    base_path = os.getcwd() # Get the current working directory
+    traj_files = flatten([glob.glob(f"{base_path}/{folder}/*{pattern}*.lammpstrj") for folder in folders])
+    os.makedirs(destination, exist_ok=True)
+    counter = 0
+    counterew = 0
+    Nfolders = 0
+    countertot = 0
+    countertotew = 0
+    countdil = [0]*len(coef)
+    countdilew = [0]*len(coef)
+    sys.stderr.write(f"""
+Using {orange}Nmax = {Nmax}{normal} to determine the occurrence of EW. {orange}Please check that it's correct.{normal}
+
+Working directory: {base_path}/
+
+""")
+    
+    for traj in traj_files:
+        atoms = read_lammps_dump(traj, index = slice(0, ReadMax))
+        New = 0
+        Nfolders += 1
+        N = len(atoms)
+        if N < Nmax:
+            ew = atoms[-last:]
+            atoms = atoms[:-last]
+            New = len(ew)
+            counterew += New
+            for i in range(New):
+                countertotew += 1
+                a,b,c = ew[i].get_cell()
+                comment = f"{countertotew} source_file_name={traj} structure_number={i} dilatation=0"
+                write_nnp(f"{destination}/EW.data", ew[i], comment)
+                if len(coef) > 0:
+                    for k,delta in enumerate(coef):
+                        x = 1. + delta/100.
+                        # Compress/dilate the cell
+                        ew[i].set_cell([a*x,b*x,c*x], scale_atoms=True)
+                        # Compute all pairwise distances
+                        dd = flatten([ew[i].get_distances(j,range(len(ew[i])), mic=True) for j in range(len(ew[i]))])
+                        min_d = min(dd[dd>0])
+                        # Keep the structure only if distances are not too short
+                        if min_d > Rmin:
+                            countertotew += 1
+                            countdilew[k] += 1
+                            comment = f"{countertotew} source_file_name={traj} structure_number={i} dilatation={delta}%"
+                            write_nnp(f"{destination}/EW.data", ew[i], comment)
+        counter += N - New
+        EWtext = '' if New==0 else f"({boldorange}{New} EW{normal})"
+        sys.stderr.write(f"{'/'.join(pathlib.Path(traj).parts[-3:]):40s} => {N:6d} structures {EWtext}\n")
+        sys.stderr.flush()
+        for i in range(len(atoms)):
+            countertot += 1
+            a,b,c = atoms[i].get_cell()
+            comment = f"{countertot} source_file_name={traj} structure_number={i} dilatation=0"
+            write_nnp(f"{destination}/stock.data", atoms[i], comment)
+            if len(coef) > 0:
+                for k,delta in enumerate(coef):
+                    x = 1. + delta/100.
+                    # Compress/dilate the cell
+                    atoms[i].set_cell([a*x,b*x,c*x], scale_atoms=True)
+                    # Compute all pairwise distances
+                    dd = flatten([atoms[i].get_distances(j,range(len(atoms[i])), mic=True) for j in range(len(atoms[i]))])
+                    min_d = min(dd[dd>0])
+                    # Keep the structure only if distances are not too short
+                    if min_d > Rmin:
+                        countertot += 1
+                        countdil[k] += 1
+                        comment = f"{countertot} source_file_name={traj} structure_number={i} dilatation={delta}%"
+                        write_nnp(f"{destination}/stock.data", atoms[i], comment)
+    sys.stderr.write(f"""────────────────────────────────────────────────────────────────────
+                                          {boldorange}            {Nfolders:6d} folders{normal}
+                                          {boldorange}TOTAL => {counter:6d} structures{normal}
+                                       {boldorange}TOTAL EW => {counterew:6d} structures{normal}""")
+    if len(coef)>0:
+        sys.stderr.write(f"                    {boldorange}With dilatation/compression => {countertot:6d} structures{normal}\n")
+        for k,delta in enumerate(coef):
+            sys.stderr.write(f"Delta = {delta}% => {countdil[k]} structures ({countdilew[k]} EW)\n")
+    sys.stderr.write(f"""
+Converted to: 
+- {destination}/stock.data
+- {destination}/EW.data
+""")
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{boldorange}Get all LAMMPS structures within a `tests/` folder (by default), and gather them in:
+- LAMMPS/stock.data : N2P2 input file with all structures
+- LAMMPS/EW.data : N2P2 input file with only the EW structures
+Run it in the training folder when the test MD have finished running.{normal}
+""")
+    parser.add_argument('--folders', '-f',
+                        nargs   = "*",
+                        help    = 'Folder names for the MD trajectory files.',
+                        default = ["tests"])
+    parser.add_argument('--pattern', '-p',
+                        help    = 'Pattern to look for in the MD trajectory files.',
+                        default = "prod")
+    parser.add_argument('--destination', '-dest',
+                        help    = 'Destination folder.',
+                        default = "LAMMPS")
+    parser.add_argument('--Rmin', '-rm',
+                        type    = float,
+                        help    = "Minimum interatomic distance in structures.",
+                        default = 1.0)
+    parser.add_argument('--last', '-l',
+                        type    = int,
+                        help    = "Take only the last `last` images of early stopped dynamics\n(i.e. stopped before `Nmax` steps).",
+                        default = 6)
+    parser.add_argument('--Nmax', '-n',
+                        type    = int,
+                        help    = "Maximum images expected per dynamics.",
+                        default = 1001)
+    parser.add_argument('--ReadMax', '-Rm',
+                        type    = int,
+                        help    = "Maximum images to read per dynamics.",
+                        default = None)
+    parser.add_argument('--coef', '-c',
+                        nargs   = "*", # 0 or more values expected -> list
+                        help    = "List of lengths deformations coefficients (in percent) for dataset expansion.",
+                        type    = float,
+                        default = [])
+    parser.add_argument('--append', '-a',
+                        help    = "Append to existing files? If not, existing files will be overwritten.",
+                        default = False, 
+                        action  = "store_true")
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+

@@ -1,0 +1,57 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]
+then
+    echo ""
+    echo -e "\033[1;31m!!! You need to specify the node to run the computation.\033[0m"
+    echo ""
+    echo "Usage:"
+    echo -e "\033[93m\033[1mxjobadaptive node26...\033[0m"
+    echo ""
+    exit
+fi
+
+nodes=("node26" "node27" "node28" "node29" "node30" "node32"  "node31" "node33" "node34" "node35" "node36" "node37" "node38")
+queue=("tc1" "tc1" "tc1" "tc2" "tc2" "tc2" "tc3" "tc3" "tc3" "tc3" "tc3" "tc4" "tc5")
+NPROC=("40" "40" "40" "40" "40" "40" "48" "96" "48" "48" "48" "80" "128")
+nproc=("20" "20" "20" "20" "20" "20" "24" "48" "24" "24" "24" "40" "64")
+
+get_index(){
+    element=$1
+    index=-1
+    for k in "${!nodes[@]}"; do
+        if [[ "${nodes[$k]}" = "${element}" ]]; then
+            index=$k
+            break
+        fi
+    done
+}
+
+PAT=`pwd`
+get_index $1
+
+echo "#!/bin/bash
+#SBATCH -J adaptive_training
+#SBATCH -A theochem
+#SBATCH -p ${queue[$index]}
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -w ${nodes[$index]}
+#SBATCH -t UNLIMITED
+#SBATCH -e $PAT/adaptive_training.err
+#SBATCH -o $PAT/adaptive_training.out
+
+export OMP_NUM_THREADS=1
+export PATH=\$PATH:\$HOME/anaconda3/bin
+export PYTHONPATH=\$PYTHONPATH:\$HOME/Boro_ML/bin
+PYTHONBIN=\$HOME/anaconda3/bin/python
+
+PAT=$PAT
+cp \$HOME/Boro_ML/bin/iteration_tools/adaptive_training.py \$PAT
+cd \$PAT
+\$PYTHONBIN adaptive_training.py
+
+" > jobadaptive
+chmod u+x jobadaptive
+
+sbatch jobadaptive

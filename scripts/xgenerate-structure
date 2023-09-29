@@ -1,0 +1,275 @@
+#!/usr/local/bin/python3
+
+"""
+Create a file for one structure with the given parameters. Output to stdout.
+"""
+
+from generatorfunctions import *
+import numpy as np
+import sys
+import argparse
+from ase.constraints import FixAtoms
+
+
+def write_inputdata(atom, comment):
+    """
+    From a list of Atoms object and comments, write an input.data file to `filename`.
+    """
+    a,b,c = atom.get_cell()/0.529177 #convert to Bohr
+    sys.stdout.write("begin\n")
+    sys.stdout.write(f"comment {comment}\n")
+    sys.stdout.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
+    sys.stdout.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
+    sys.stdout.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
+    for at,pos in zip(atom.get_chemical_symbols(), atom.positions):
+        x,y,z = pos/0.529177 #convert to Bohr
+        sys.stdout.write(f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {0:22.14e} {0:22.14e} {0:22.14e}\n")
+    sys.stdout.write(f"energy {0:22.14e}\n")
+    sys.stdout.write(f"charge 0\n")
+    sys.stdout.write("end\n")
+
+
+orange = "\033[93m"
+bold   = "\033[1m"
+normal = "\033[0m"
+
+def main(args):
+    nx          = args.nx
+    ny          = args.ny
+    substrate   = args.substrate
+    orientation = args.orientation
+    nz          = args.nz
+    a           = args.a
+    D           = args.D
+    vdw         = args.vdw
+    Nboro       = args.Nboro
+    allotrope   = args.allotrope
+    size_min    = args.size_min
+    vac         = args.vac
+    out         = args.out
+    fixed       = args.fixed
+    angle       = args.angle
+    rand        = np.abs(args.rand)
+
+    if D is not None:
+        a = 2*np.cos(np.pi/4)*D
+
+    celpar = 1
+    if substrate in metals.keys():
+        celpar = a if a is not None else metals[substrate]
+    
+    if nz<1:
+        nz = 1
+        substrate = "None"
+    
+    struc = create_structure(
+            nx          = predef[allotrope][0], 
+            ny          = predef[allotrope][1],
+            listholes   = predef[allotrope][2],
+            repeatx     = nx, 
+            repeaty     = ny,
+            metalchoice = substrate, 
+            surfchoice  = orientation,
+            vdwdist     = vdw, 
+            vac         = vac,
+            NZ          = nz,
+            size_min    = size_min,
+            random      = rand,
+            Nboro       = Nboro,
+            glimpse     = False,
+            a           = celpar,
+            angle       = angle
+        )
+    nometal = create_structure(
+            nx          = predef[allotrope][0], 
+            ny          = predef[allotrope][1],
+            listholes   = predef[allotrope][2],
+            repeatx     = nx, 
+            repeaty     = ny,
+            metalchoice = "None", 
+            surfchoice  = orientation,
+            vdwdist     = vdw, 
+            vac         = vac,
+            NZ          = nz,
+            size_min    = size_min,
+            random      = 0,
+            Nboro       = Nboro,
+            glimpse     = False,
+            a           = celpar,
+            angle       = angle
+        )
+    unit_nometal = create_structure(
+            nx          = predef[allotrope][0], 
+            ny          = predef[allotrope][1],
+            listholes   = predef[allotrope][2],
+            repeatx     = 1, 
+            repeaty     = 1,
+            metalchoice = "None", 
+            surfchoice  = orientation,
+            vdwdist     = vdw, 
+            vac         = vac,
+            NZ          = nz,
+            size_min    = None,
+            random      = 0,
+            Nboro       = Nboro,
+            glimpse     = False,
+            a           = celpar,
+            angle       = angle
+        )
+    struc = sort(struc, tags = struc.get_masses())
+    if substrate != 'None':
+        try:
+            slab = funcmap[orientation](substrate, size=(1,1,nz), 
+                                        a = celpar, orthogonal = True)
+        except ValueError:
+            slab = funcmap[orientation](substrate, size=(1,2,nz), 
+                                        a = celpar, orthogonal = True)
+        slaba = slab.get_cell()[0][0]
+        slabb = slab.get_cell()[1][1]
+        multx = int(np.round(nometal.get_cell()[0][0]/slaba))
+        multy = int(np.round(nometal.get_cell()[1][1]/slabb))
+    nx = int(np.round(nometal.get_cell()[0][0]/unit_nometal.get_cell()[0][0],1))
+    ny = int(np.round(nometal.get_cell()[1][1]/unit_nometal.get_cell()[1][1],1))
+    if fixed is not None:
+        # zset = np.sort(np.array(list(set(struc.positions[:,2]))))
+        # c = FixAtoms(mask=struc.positions[:,2] <= (zset[fixed-1]+0.1))
+        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(fixed-1)+1.2)
+        struc.set_constraint(c)
+        struc = sort(struc, tags = struc.get_masses())
+    if out=='vasp':
+        write(sys.stdout,
+              images = struc, 
+              format = "vasp", 
+              vasp5  = True)
+    elif out=='lammps':
+        write_lammps(None, struc,
+                     comments = f"# {allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+    elif out=='xyz':
+        write(sys.stdout,
+              images = struc, 
+              format = "xyz")
+    elif out=='n2p2':
+        write_inputdata(struc, f"{allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+    else:
+        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}{normal}\n")
+
+    count=""
+    if substrate != 'None':
+        count=f"({len([s for s in struc.get_chemical_symbols() if s =='B'])} B, {len([s for s in struc.get_chemical_symbols() if s !='B'])} {substrate})"
+    sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
+
+- Allotrope               : {allotrope}
+- Supercell dimension     : {nx}x{ny}
+- N atoms                 : {len(struc)} {count}
+- Cell                    : {struc.get_cell()[0][0]:.5f} x {struc.get_cell()[1][1]:.5f} x {struc.get_cell()[2][2]:.2f} Å
+- Base cell without subs. : {unit_nometal.get_cell()[0][0]:<7.5f} x {unit_nometal.get_cell()[1][1]:7.5f} Å
+- Supercell without subs. : {nometal.get_cell()[0][0]:7.5f} x {nometal.get_cell()[1][1]:7.5f} Å
+- Distorsion              : {(struc.get_cell()[0][0]-nometal.get_cell()[0][0])/nometal.get_cell()[0][0]*100:.2f} x {(struc.get_cell()[1][1]-nometal.get_cell()[1][1])/nometal.get_cell()[1][1]*100:.2f} %
+
+""")
+    if substrate != 'None':
+        sys.stderr.write(f"""- Substrate               : {substrate} {'' if substrate == 'None' else orientation}
+- N substrate layers      : {nz}
+- {substrate} cell parameter       : {a if a is not None else metals[substrate]:.5f} Å
+- Metal base cell         : {slab.get_cell()[0][0]:7.5f} x {slab.get_cell()[1][1]:7.5f} Å
+- Metal supercell         : {multx} x {multy}
+- vdW distance            : {vdw} Å
+- Fixed layers            : {fixed}
+
+""")
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs["help"] = help
+        if default is not None and args[0] != "-h":
+            kwargs["default"] = default
+            if help is not None:
+                kwargs["help"] += f"\n{orange}Default: {default}{normal}"
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{bold}{orange}Create a file for one structure with the given parameters. Output to `stdout` and shows structure parameters in `stderr`. Usage: `xgenerate-structure -al beta12 -sm 10 > POSCAR`.{normal}
+""")
+    parser.add_argument('--allotrope', '-al',
+                        type    = str,
+                        help    = f"Borophene allotrope to consider. Must be one of:\n{[k for k in predef.keys()]}",
+                        default = "alpha")
+    parser.add_argument('--nx', '-nx',
+                        help    = "Supercell repetitions along x. Overwritten if `size_min` is provided.",
+                        type    = int,
+                        default = 1)
+    parser.add_argument('--ny', '-ny',
+                        help    = "Supercell repetitions along y. Overwritten if `size_min` is provided.",
+                        type    = int,
+                        default = 1)
+    parser.add_argument('--substrate', '-sub',
+                        help    = f"Substrate to consider. Must be one of: {['None']+[k for k in metals.keys()]}",
+                        type    = str,
+                        default = "Ag")
+    parser.add_argument('--orientation', '-o',
+                        type    = str,
+                        help    = "Substrate orientation to consider. Must be one of `fcc111`, `fcc110`, `fcc100`, or `fcc211`",
+                        default = "fcc111")
+    parser.add_argument('--nz', '-nz',
+                        help    = "Number of substrate layers.",
+                        type    = int,
+                        default = 3)
+    parser.add_argument('--a', '-a',
+                        help    = f"FCC unit cell of the metal. If not provided, apply the default one:\n{metals}",
+                        type    = float,
+                        default = None)
+    parser.add_argument('--D', '-D',
+                        help    = f"Alternative definition of the FCC unit cell of the metal by\nthe 1st neighbor distance of metal atoms. If provided, overrides\n`a` with the formula `a = 2*cos(pi/4)*D`.",
+                        type    = float,
+                        default = None)
+    parser.add_argument('--size_min', '-sm',
+                        help    = f"If `size_min` is provided, `size_min` becomes the minimum size of\nthe box in any direction. If the size is smaller than `size_min` in a direction,\nthe box is duplicated along this direction as long as this is the case.",
+                        type    = float,
+                        default = None)
+    parser.add_argument('--vdw', '-vdw',
+                        help    = "Van der Waals distance in Å.",
+                        type    = float,
+                        default = 2.45)
+    parser.add_argument('--Nboro', '-nb', 
+                        help    = "Number of borophene layers.",
+                        type    = int,
+                        default = 1)
+    parser.add_argument('--angle', '-ang', 
+                        help    = "Rotate the borophene layer. Either 0 or 90.",
+                        type    = int,
+                        default = 0)
+    parser.add_argument('--fixed', '-f', 
+                        help    = "Fixed number of substrate layers, starting from the bottom.",
+                        type    = int,
+                        default = None)
+    parser.add_argument('--vac', '-v',
+                        help    = "Size of the cell along c in Å. If set to 0, will fall back to no vacuum (periodic cell).",
+                        type    = float,
+                        default = 25.0)
+    parser.add_argument('--rand', '-r',
+                        help    = "Max random motion in Å. If set to 0, will fall back to no random motion.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--out', '-out',
+                        help    = "Output file format. Must be one of: `vasp`, `xyz`, `lammps`, or `n2p2`.",
+                        type    = str,
+                        default = 'vasp')
+
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+

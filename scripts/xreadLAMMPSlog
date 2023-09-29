@@ -1,0 +1,73 @@
+#!/usr/local/bin/python3
+
+"""
+Read log.lammps file to retrieve thermo data in a friendly csv format in stdout
+"""
+
+import argparse
+import sys
+import os
+
+boldorange = "\033[93m\033[1m"
+orange = "\033[93m"
+normal = "\033[0m"
+
+def main(args):
+    input = args.input
+    for inp in input:
+        if os.path.exists(inp):
+            with open(inp, "r") as f:
+                lines = f.readlines()
+            break
+        else:
+            sys.stderr.write(f'\n\nInput file {input} not found!\n\n\n')
+            sys.exit()
+    run = 0
+    begin = [i for i,b in enumerate(lines) if "Per MPI rank memory allocation" in b]
+    ts = [b.split(": ")[1].strip() for i,b in enumerate(lines) if "  Time step     :" in b]
+    end = [i for i,e in enumerate(lines) if "Loop time" in e]
+    if len(begin)>len(end):#in case the run has not finished yet, i.e. when reading `lammps.out`
+        end.append(len(lines))
+    header = lines[begin[0]+1].split()
+    sys.stdout.write(f"run,timestep,{','.join(header)}\n")
+    for run in range(len(begin)):
+        for i in range(begin[run]+2, end[run]):
+            if "#" not in lines[i]:
+                toprint = lines[i].split()
+                sys.stdout.write(f"{run+1},{ts[run]},{','.join(toprint)}\n")
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{boldorange}Read log.lammps file to retrieve thermo data in a friendly csv format in stdout.{normal}
+""")
+    parser.add_argument('--input', '-in',
+                        nargs  = '*',
+                        help    = 'Input file name to read.',
+                        default = ['lammps.out', "log.lammps"])
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+

@@ -1,0 +1,181 @@
+#!/usr/local/bin/python3
+
+"""
+Convert files to other format in stdout
+Name must contain either:
+- 'POSCAR' or 'OUTCAR' for vasp files
+- '.data' or '.inp' for N2P2 input files
+- '.lammpstrj' for lammps trajectory files
+"""
+
+from generatorfunctions import *
+import argparse
+import sys
+from os.path import isfile
+import numpy as np
+from ase.constraints import FixAtoms
+from ase.io.vasp import read_vasp_out
+from ase.io.vasp import read_vasp
+
+orange = "\033[93m"
+bold   = "\033[1m"
+normal = "\033[0m"
+
+def flatten(xss):
+    """Flatten a list of lists into a single list."""
+    return np.array([x for xs in xss for x in xs])
+
+
+def write_inputdata(atom, comment):
+    """
+    From a list of Atoms object and comments, write an input.data file to `filename`.
+    """
+    a,b,c = atom.get_cell()/0.529177 #convert to Bohr
+    sys.stdout.write("begin\n")
+    sys.stdout.write(f"comment {comment}\n")
+    sys.stdout.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
+    sys.stdout.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
+    sys.stdout.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
+    for at,pos in zip(atom.get_chemical_symbols(), atom.positions):
+        x,y,z = pos/0.529177 #convert to Bohr
+        sys.stdout.write(f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {0:22.14e} {0:22.14e} {0:22.14e}\n")
+    sys.stdout.write(f"energy {0:22.14e}\n")
+    sys.stdout.write(f"charge 0\n")
+    sys.stdout.write("end\n")
+
+
+def read_inputdata(filename: str):
+    """
+    Read input.data file and return a list of Atoms objects and the comments
+    """
+    def read_data_block(lines, begin: int, end: int):
+        """
+        Read block of structure in input.data that have been read in to `lines`
+        """
+        lattice = np.array([[i for i in lines[j].split(' ') if i][1:4] for j in range(begin+2, begin+5)], dtype=float)
+        pos = np.array([[i for i in lines[j].split(' ') if i][1:4] for j in range(begin+5, end-2)], dtype=float)
+        symb = np.array([[i for i in lines[j].split(' ') if i][4] for j in range(begin+5, end-2)])
+        return(Atoms(symbols   = symb,
+                     positions = pos*0.529177, #convert to Å
+                     cell      = lattice*0.529177, pbc=True))
+    # # # # # # # # # # # # 
+    with open(filename, 'r') as f:
+        lines = f.read().splitlines()
+    begin = np.array([i for i, x in enumerate(lines) if x == 'begin'])
+    end = np.array([i for i, x in enumerate(lines) if x == 'end'])
+    comments = np.array([x for x in lines if 'comment' in x])
+    atoms = [read_data_block(lines, b, e) for b,e in zip(begin, end)]
+    return(atoms, comments)
+
+
+def main(args):
+    input = args.input
+    image = args.image
+    out   = args.out
+    fixed = args.fixed
+    rmSub = args.rmSub
+    
+    if not isfile(input):
+        sys.stderr.write(f"\n{bold}{orange}{input} file does not exist!{normal}\n\n")
+        sys.exit()
+    
+    if ".lammpstrj" in input:
+        struc = read_lammps_dump(input, index = image)
+        comment = ""
+    elif ".data" or ".inp" in input:
+        atoms, comments = read_inputdata(input)
+        struc = atoms[image]
+        comment = comments[image]
+    elif "OUTCAR" in input:
+        struc = read_vasp_out(input, index = image)
+        comment = ""
+    elif "POSCAR" in input:
+        struc = read_vasp(input)
+        comment = ""
+    else:
+        raise ValueError(f"""
+{bold}{orange}Unknown input file format!
+Name must contain either:
+- 'POSCAR' or 'OUTCAR' for vasp files
+- '.data' or '.inp' for NNP input files
+- '.lammpstrj' for lammps trajectory files
+{out}{normal}""")
+    struc = sort(struc, tags = struc.get_masses())
+    if rmSub is not None:
+        del struc[[ atom.index for atom in struc if atom.position[2] <= 2.35*(rmSub-1)+1.2 ]]
+    if fixed is not None:
+        # zset = np.sort(np.array(list(set(struc.positions[:,2]))))
+        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(rmSub-1)+1.2)
+        struc.set_constraint(c)
+        struc = sort(struc, tags = struc.get_masses())
+    if out=='vasp':
+        write(sys.stdout, images = struc, format = "vasp", vasp5  = True)
+    elif out=='lammps':
+        write_lammps(name = None, atoms = struc, comments=comment, atom_style = 'atomic')
+    elif out=='xyz':
+        write(sys.stdout, images = struc, format = "xyz")
+    elif out=='n2p2':
+        write_inputdata(struc, comment)
+    else:
+        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', or 'n2p2'.{normal}\n")
+    sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
+
+- N atoms     : {len(struc)}
+- Composition : {struc.symbols}
+- Cell        : {struc.get_cell()[0][0]:.5f} x {struc.get_cell()[1][1]:.5f} x {struc.get_cell()[2][2]:.2f} Å
+
+""")
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{bold}{orange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""{bold}{orange}Convert files to other format in stdout
+Name must contain either:
+- 'POSCAR' or 'OUTCAR' for vasp files
+- '.data' or '.inp' for N2P2 input files
+- '.lammpstrj' for lammps trajectory files{normal}
+""")
+    parser.add_argument('--input', '-in',
+                        help    = 'Input file name.',
+                        default = "input.data")
+    parser.add_argument('--image', '-i',
+                        type    = int,
+                        help    = 'Index of the structure to convert.',
+                        default = 0)
+    parser.add_argument('--out', '-out',
+                        help    = "Output file format. Must be one of: 'vasp', 'xyz', 'lammps', or 'n2p2'.",
+                        type    = str,
+                        default = 'lammps')
+    parser.add_argument('--fixed', '-f', 
+                        help    = "Fixed number of substrate layers, starting from the bottom. Only for 'vasp' output.",
+                        type    = int,
+                        default = None)
+    parser.add_argument('--rmSub', '-rmSub', 
+                        help    = "If provided, remove `rmSub` layers of substrate, starting from the bottom.",
+                        type    = int,
+                        default = None)
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+

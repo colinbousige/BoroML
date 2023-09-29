@@ -1,0 +1,91 @@
+#−−−−−−−−−−−−−−−−−−− Parameters −−−−−−−−−−−−−−−−−−−
+# Input structure file
+variable inputfile   string structure.data
+# Initial temperature (K)
+variable T0          equal 300
+# Final temperature (K)
+variable T1          equal 300
+# Pressure (atm)
+variable P           equal 1.01325
+# Dump every dumptime
+variable dumptime    equal 200
+# Print thermo every
+variable thermoprint equal 1000
+# Output trajectory file name
+variable dumpname    string alpha_1L_3x5_3Ag_fcc111_F2_0deg_nve_withPE-${T0}K-${T1}K
+# NNP
+variable nnpCutoff   equal  6.36
+variable nnpDir      string "./"
+
+#−−−−−−−−−−−−−−−−−−− Initialize −−−−−−−−−−−−−−−−−−−
+processors * * *
+units      metal
+boundary   p p p
+atom_style atomic
+
+#−−−−−−−−−−−−−−−−−−− Input −−−−−−−−−−−−−−−−−−−-----
+read_data  ${inputfile} # read input structure
+replicate  1 1 1 # make supercell
+group      borophene type 1
+group      substrate type 2
+region     regfixedlayer block INF INF INF INF INF 3.5 # define region where atoms are fixed
+group      fixedlayer region regfixedlayer
+group      mobile subtract all fixedlayer
+
+#−−−−−−−−−−−−−−−−−−− Potential -−−−−−−−−−−−−−−−−−−−
+pair_style nnp dir ${nnpDir} showew no showewsum 1000 maxew 100 &
+           cflength 1.8897261328 cfenergy 0.0367493254 emap "1:B,2:Ag"
+pair_coeff * * ${nnpCutoff}
+
+#−−−−−−−−−−−−−−−−−−−− Output −−−−−−−−−−−−−−−−−−−−−−
+compute       mytemp mobile temp # the temperature is computed on moving atoms only
+thermo_style  custom step c_mytemp ke pe etotal press lx ly lz
+thermo_modify norm yes # extensive quantities will be normalized per atom
+thermo        ${thermoprint}
+compute       pe all pe/atom
+
+
+#−−−−−−−−−−−−−−−−−−−− MD Run ---−−−−−−−−−−−−−−−−−−−
+# Create initial velocities
+velocity   mobile create ${T0} 123456
+
+#------- Thermalization 1 -------
+dump           dmpequil1 all custom 100 ${dumpname}_equil1.lammpstrj id element x y z
+dump_modify    dmpequil1 flush yes sort id element B Ag
+fix         mdequil1 mobile nvt temp ${T0} ${T0} $(1.0*dt)
+timestep    0.0001
+run         25000
+unfix       mdequil1
+undump      dmpequil1
+
+#------- Thermalization 2 -------
+dump           dmpequil2 all custom 100 ${dumpname}_equil2.lammpstrj id element x y z
+dump_modify    dmpequil2 flush yes sort id element B Ag
+fix         mdequil2 mobile nvt temp ${T0} ${T0} $(10.0*dt)
+timestep    0.0001
+run         25000
+unfix       mdequil2
+undump      dmpequil2
+
+#------- Thermalization 3 -------
+dump           dmpequil3 all custom 100 ${dumpname}_equil3.lammpstrj id element x y z
+dump_modify    dmpequil3 flush yes sort id element B Ag
+fix         mdequil3 mobile nvt temp ${T0} ${T0} $(100.0*dt)
+timestep    0.0001
+run         50000
+unfix       mdequil3
+undump      dmpequil3
+
+#------- Production -------
+dump           dmpprod all custom ${dumptime} ${dumpname}_prod.lammpstrj id element x y z c_pe
+dump_modify    dmpprod flush yes sort id element B Ag
+reset_timestep 0
+fix         mdprod mobile nve
+timestep    0.0001
+run         100000
+unfix       mdprod
+undump      dmpprod
+
+
+print "Job done."
+
