@@ -1,12 +1,6 @@
----
-title: Neural network approach for a rapid prediction of metal-supported borophene properties
-author: 
-  - name : Colin BOUSIGE
-    email: colin.bousige@cnrs.fr
-    affiliation: CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
-date: 25/07/2023
----
+# Neural network approach for a rapid prediction of metal-supported borophene properties
 
+- Author: [Colin BOUSIGE](mailto:colin.bousige@cnrs.fr), CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
 
 This archive contains various files and scripts linked with the article:
 *``Neural network approach for a rapid prediction of metal-supported borophene properties''*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, (submitted) (2023).
