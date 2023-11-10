@@ -78,6 +78,7 @@ def write_lammps_input(
     fix_sub         = None,
     seed            = 123456,
     minimize        = True,
+    ftol            = 0.01,
     outPE           = False,
     velocities      = False):
     """ Writes a LAMMPS input file from the given parameters (for batch writing of input files)
@@ -126,6 +127,8 @@ def write_lammps_input(
         Seed for velocities random generator
     minimize        : logical
         Minimize structure before MD run?
+    ftol            : float
+        Tolerance on forces for energy minimization
     velocities      : logical
         Save velocities in the dump files?
     outPE           : logical
@@ -171,13 +174,19 @@ unfix       md{jobname}
 undump      dmp{jobname}
 """
     mini = ""
+    miniheader=""    
     if minimize:
-        mini = """
+        mini = f"""
 #-−-−−---−---−−−− Cell optimization −−−−−−−−-------
-fix 1 all box/relax iso 0.0 vmax 0.001
-minimize 1.0e-4 1.0e-6 100 1000
-unfix 1
+thermo        10
+fix freeze fixedlayer setforce 0.0 0.0 0.0
+minimize      0 ${{ftol}} 1000 10000
+unfix freeze
+thermo        ${{thermoprint}}
 """
+        miniheader=f"""
+# Minimization tolerance on Forces
+variable ftol        equal {ftol}"""
 
     f = open(outputfile, "w")
     f.write(f"""#−−−−−−−−−−−−−−−−−−− Parameters −−−−−−−−−−−−−−−−−−−
@@ -192,7 +201,7 @@ variable P           equal {P}
 # Dump every dumptime
 variable dumptime    equal {dumptime}
 # Print thermo every
-variable thermoprint equal {thermoprint}
+variable thermoprint equal {thermoprint}{miniheader}
 # Output trajectory file name
 variable dumpname    string {dumpname}-${{T0}}K-${{T1}}K
 # NNP
@@ -486,13 +495,13 @@ def create_structure(
         struct.positions[:, 0] = struct.positions[:, 0] / structa * cella
         struct.positions[:, 1] = struct.positions[:, 1] / structb * cellb
         # define new cell parameters for the slab
-        slab.set_cell([[cella,0,0],
-                       [0,cellb,0],
-                       [0,0,cellc] ])
+        slab.set_cell([ [cella,0,0],
+                        [0,cellb,0],
+                        [0,0,cellc] ])
         # define new cell parameters for the borophene
         struct.set_cell([[cella,0,0],
-                         [0,cellb,0],
-                         [0,0,structc]])
+                            [0,cellb,0],
+                            [0,0,structc]])
         # define new structure with the borophene sheet on top of the slab
         struct.positions[:,2] = struct.positions[:,2] + max(slab.positions[:,2]) + vdwdist
         struct = struct + slab

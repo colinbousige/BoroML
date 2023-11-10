@@ -4,7 +4,7 @@
 Convert files to other format in stdout
 Name must contain either:
 - 'POSCAR' or 'OUTCAR' for vasp files
-- '.data' or '.inp' for N2P2 input files
+- '.data' or '.inp' for NNP input files
 - '.lammpstrj' for lammps trajectory files
 """
 
@@ -13,6 +13,7 @@ import argparse
 import sys
 from os.path import isfile
 import numpy as np
+import pandas as pd
 from ase.constraints import FixAtoms
 from ase.io.vasp import read_vasp_out
 from ase.io.vasp import read_vasp
@@ -82,7 +83,11 @@ def main(args):
     if ".lammpstrj" in input:
         struc = read_lammps_dump(input, index = image)
         comment = ""
-    elif ".data" or ".inp" in input:
+    elif ".data" in input:
+        atoms, comments = read_inputdata(input)
+        struc = atoms[image]
+        comment = comments[image]
+    elif ".inp" in input:
         atoms, comments = read_inputdata(input)
         struc = atoms[image]
         comment = comments[image]
@@ -104,8 +109,7 @@ Name must contain either:
     if rmSub is not None:
         del struc[[ atom.index for atom in struc if atom.position[2] <= 2.35*(rmSub-1)+1.2 ]]
     if fixed is not None:
-        # zset = np.sort(np.array(list(set(struc.positions[:,2]))))
-        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(rmSub-1)+1.2)
+        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(fixed-1)+1.2)
         struc.set_constraint(c)
         struc = sort(struc, tags = struc.get_masses())
     if out=='vasp':
@@ -145,7 +149,7 @@ def get_parser():
     description=f"""{bold}{orange}Convert files to other format in stdout
 Name must contain either:
 - 'POSCAR' or 'OUTCAR' for vasp files
-- '.data' or '.inp' for N2P2 input files
+- '.data' or '.inp' for NNP input files
 - '.lammpstrj' for lammps trajectory files{normal}
 """)
     parser.add_argument('--input', '-in',
