@@ -62,6 +62,7 @@ def write_lammps_input(
     substrate       = "Ag",
     T0              = 10,
     T1              = 300,
+    T2              = None,
     P               = 1.01325,
     replicate       = (4,2),
     runtime         = [20000,20000,20000],
@@ -94,6 +95,8 @@ def write_lammps_input(
         Initial temperature (K)
     T1              : float
         Final temperature (K) 
+    T2              : float
+        If provided, add a second production run with the same parameters as before, going from T1 to T2.
     P               : float
         Pressure (atm)
     replicate       : (int, int)
@@ -151,7 +154,7 @@ def write_lammps_input(
         if(i<len(ts)-1):
             jobname = f"equil{i+1}"
             MDrun += f"""\n#------- Thermalization {i+1} -------
-dump           dmp{jobname} all custom 100 ${{dumpname}}_{jobname}.lammpstrj id element x y z
+dump           dmp{jobname} all custom 1000 ${{dumpname}}_{jobname}.lammpstrj id element x y z
 dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
             mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T0}} ${{T0}} $({dp}*dt)"
         else:
@@ -173,15 +176,33 @@ run         {N}
 unfix       md{jobname}
 undump      dmp{jobname}
 """
+    if T2 is not None and prodtype!='nve':
+        MDrun += f"""\n#------- Cooling Production -------
+dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}2.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}
+dump_modify    dmp{jobname} flush yes sort id element B {substrate}
+reset_timestep 0"""
+        mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T1}} ${{T2}} $({dp}*dt)"""
+        if MDtype == "npt":
+            mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
+        MDrun += f"""
+{mymd}
+timestep    {dt}
+run         {N}
+unfix       md{jobname}
+undump      dmp{jobname}
+"""
     mini = ""
     miniheader=""    
     if minimize:
         mini = f"""
 #-−-−−---−---−−−− Cell optimization −−−−−−−−-------
 thermo        10
-fix freeze fixedlayer setforce 0.0 0.0 0.0
+dump minidmp  all custom 10 ${{dumpname}}_mini.lammpstrj id element x y z{" c_pe" if outPE else ""}
+dump_modify   minidmp flush yes sort id element B {substrate}
+fix           freeze fixedlayer setforce 0.0 0.0 0.0
 minimize      0 ${{ftol}} 1000 10000
-unfix freeze
+unfix         freeze
+undunmp       minidmp
 thermo        ${{thermoprint}}
 """
         miniheader=f"""
@@ -359,7 +380,8 @@ def create_structure(
     dmax=0,
     shiftX=0,
     shiftY=0,
-    a=None
+    a=None,
+    island=0.
     ):
     """Create a borophene structure on a substrate
     
@@ -412,6 +434,8 @@ def create_structure(
         Shift borophene structure by (shiftX,shiftY) in Angstrom
     a : float
         If a is provided, use it as the lattice parameter of the metal slab, otherwise use the default one ({'Ag': 4.04, 'Au': 4.0782, 'Cu': 3.6149, 'Pt': 3.9242, 'Ni': 3.5240, 'Ir': 3.8390, 'Si': 5.4309}).
+    island : float
+        If island is provided, remove all B atoms outside a circle of radius island centered on the substrate center.
     """
     # # # # # # # # # 
     # Create borophene polymorph
@@ -534,6 +558,15 @@ def create_structure(
             added += 1
     # Sort atoms to have B first
     struct = sort(struct, tags = struct.get_masses())
+    if island>0:
+        # center all positions
+        a,b,c,alpha,beta,gamma = struct.cell.cellpar()
+        struct.positions[:,0] -= a/2
+        struct.positions[:,1] -= b/2
+        B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and (at.position[0]**2+at.position[1]**2)>(island/2)**2]
+        del struct[B_to_remove]
+        struct.positions[:,0] += a/2
+        struct.positions[:,1] += b/2
     # View structure with ASE
     if glimpse:
         view(struct)

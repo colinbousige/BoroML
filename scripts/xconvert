@@ -27,6 +27,23 @@ def flatten(xss):
     return np.array([x for xs in xss for x in xs])
 
 
+def write_lammps_traj(structure):
+    index = 0
+    a,b,c = structure.cell.cellpar()[:3]
+    sys.stdout.write(f"ITEM: TIMESTEP\n")
+    sys.stdout.write(f"{index}\n")
+    sys.stdout.write(f"ITEM: NUMBER OF ATOMS\n")
+    sys.stdout.write(f"{len(structure)}\n")
+    sys.stdout.write(f"ITEM: BOX BOUNDS pp pp pp\n")
+    sys.stdout.write(f"{0:15.9e} {a:15.9e}\n")
+    sys.stdout.write(f"{0:15.9e} {b:15.9e}\n")
+    sys.stdout.write(f"{0:15.9e} {c:15.9e}\n")
+    sys.stdout.write(f"ITEM: ATOMS id element x y z\n")
+    for i,(at,pos) in enumerate(zip(structure.get_chemical_symbols(), structure.positions)):
+        x,y,z = pos
+        sys.stdout.write(f"{i+1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n")
+
+
 def write_inputdata(atom, comment):
     """
     From a list of Atoms object and comments, write an input.data file to `filename`.
@@ -116,12 +133,14 @@ Name must contain either:
         write(sys.stdout, images = struc, format = "vasp", vasp5  = True)
     elif out=='lammps':
         write_lammps(name = None, atoms = struc, comments=comment, atom_style = 'atomic')
+    elif out=='lammpstrj':
+        write_lammps_traj(struc)
     elif out=='xyz':
         write(sys.stdout, images = struc, format = "xyz")
     elif out=='n2p2':
         write_inputdata(struc, comment)
     else:
-        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', or 'n2p2'.{normal}\n")
+        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.{normal}\n")
     sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
 
 - N atoms     : {len(struc)}
@@ -158,9 +177,9 @@ Name must contain either:
     parser.add_argument('--image', '-i',
                         type    = int,
                         help    = 'Index of the structure to convert.',
-                        default = 0)
+                        default = -1)
     parser.add_argument('--out', '-out',
-                        help    = "Output file format. Must be one of: 'vasp', 'xyz', 'lammps', or 'n2p2'.",
+                        help    = "Output file format. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.",
                         type    = str,
                         default = 'lammps')
     parser.add_argument('--fixed', '-f', 

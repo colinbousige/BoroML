@@ -1,16 +1,4 @@
-"""
-Streamlit app to visually build borophene structures
-Install Streamlit with `pip install streamlit`, then just run with:
-```
-streamlit run BoroPy.py
-```
-
-Author: Colin Bousige
-Email: colin.bousige@cnrs.fr
-Version 1.0
-Date: 2023/09/29
-"""
-
+# run with "streamlit run BoroPy.py"
 
 from generatorfunctions import *
 from fractions import Fraction
@@ -22,9 +10,12 @@ from ase.io import write
 from ase.visualize import view
 import matplotlib.pyplot as plt
 from scipy.spatial import distance
+import os.path
+import os
 import pandas as pd
 from io import StringIO 
 import sys
+from pathlib import Path, PurePath
 
 
 class Capturing(list):
@@ -74,7 +65,7 @@ st.set_page_config(
         'Report a bug': "https://lmi.cnrs.fr/author/colin-bousige/",
         'About': """
         ## Borophene builder
-        Version date 2023-09-29.
+        Version date 2023-06-26.
 
         This app was made by [Colin Bousige](https://lmi.cnrs.fr/author/colin-bousige/). Contact me for support, requests, or to signal a bug.
         """
@@ -150,6 +141,12 @@ random = right.number_input("Add random motion of max value [Å]", min_value=0.,
 shiftX = left.number_input("Shift Borophene X [Å]", min_value=None, max_value=None, value=0., step=.1)
 shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=None, value=0., step=.1)
 
+# # # # # # # # # # # # # # # # # # 
+st.sidebar.write("# Borophene island")
+island = st.sidebar.number_input("Borophene island diameter [Å]", min_value=0., max_value=None, value=0., step=5.)
+
+
+
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
 # # # # # # # # # # # # # # # # # # 
@@ -187,7 +184,8 @@ struct = create_structure(
     dmax=0,
     shiftX=shiftX,
     shiftY=shiftY,
-    Nboro=Nboro
+    Nboro=Nboro,
+    island=island
 )
 
 base = create_structure(

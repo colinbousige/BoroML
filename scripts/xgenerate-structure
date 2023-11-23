@@ -49,6 +49,7 @@ def main(args):
     out         = args.out
     fixed       = args.fixed
     angle       = args.angle
+    island      = args.island
     rand        = np.abs(args.rand)
 
     if D is not None:
@@ -78,7 +79,8 @@ def main(args):
             Nboro       = Nboro,
             glimpse     = False,
             a           = celpar,
-            angle       = angle
+            angle       = angle,
+            island      = island
         )
     nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -131,8 +133,6 @@ def main(args):
     nx = int(np.round(nometal.get_cell()[0][0]/unit_nometal.get_cell()[0][0],1))
     ny = int(np.round(nometal.get_cell()[1][1]/unit_nometal.get_cell()[1][1],1))
     if fixed is not None:
-        # zset = np.sort(np.array(list(set(struc.positions[:,2]))))
-        # c = FixAtoms(mask=struc.positions[:,2] <= (zset[fixed-1]+0.1))
         c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(fixed-1)+1.2)
         struc.set_constraint(c)
         struc = sort(struc, tags = struc.get_masses())
@@ -177,6 +177,8 @@ def main(args):
 - Fixed layers            : {fixed}
 
 """)
+    if island > 0 :
+        sys.stderr.write(f"- Island diameter : {island} Å\n\n")
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -214,7 +216,7 @@ def get_parser():
                         default = "Ag")
     parser.add_argument('--orientation', '-o',
                         type    = str,
-                        help    = "Substrate orientation to consider. Must be one of `fcc111`, `fcc110`, `fcc100`, or `fcc211`",
+                        help    = "Substrate orientation to consider. Must be one of fcc111, fcc110, fcc100, or fcc211",
                         default = "fcc111")
     parser.add_argument('--nz', '-nz',
                         help    = "Number of substrate layers.",
@@ -253,11 +255,15 @@ def get_parser():
                         type    = float,
                         default = 25.0)
     parser.add_argument('--rand', '-r',
-                        help    = "Max random motion in Å. If set to 0, will fall back to no random motion.",
+                        help    = "Max random motion in Å.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--island', '-il',
+                        help    = "Borophene island diameter in Å. No island if set to 0.",
                         type    = float,
                         default = 0)
     parser.add_argument('--out', '-out',
-                        help    = "Output file format. Must be one of: `vasp`, `xyz`, `lammps`, or `n2p2`.",
+                        help    = "Output file format. Must be one of: vasp, xyz, lammps, or n2p2.",
                         type    = str,
                         default = 'vasp')
 
