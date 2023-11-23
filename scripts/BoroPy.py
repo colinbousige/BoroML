@@ -8,6 +8,7 @@ import itertools
 from ase import *
 from ase.io import write
 from ase.visualize import view
+from ase.constraints import FixAtoms
 import matplotlib.pyplot as plt
 from scipy.spatial import distance
 import os.path
@@ -145,7 +146,11 @@ shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=
 st.sidebar.write("# Borophene island")
 island = st.sidebar.number_input("Borophene island diameter [Å]", min_value=0., max_value=None, value=0., step=5.)
 
-
+# # # # # # # # # # # # # # # # # # 
+st.sidebar.write("# For VASP output")
+fixed = st.sidebar.number_input("Fixed number of layers", 
+                                min_value=0, max_value=None, 
+                                value=0, step=1)
 
 st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
@@ -235,6 +240,10 @@ structfull = create_structure(
 structfull = structfull[np.array(structfull.get_chemical_symbols())=="B"]
 sortedpos = np.lexsort((structfull.positions[:, 1], structfull.positions[:, 0]))
 structfull.positions = structfull.positions[sortedpos]
+
+if fixed > 0:
+    c = FixAtoms(mask=struct.positions[:,2] <= 2.35*(fixed-1)+1.2)
+    struct.set_constraint(c)
 
 if view3d:
     view(struct)
