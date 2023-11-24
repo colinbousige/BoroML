@@ -381,7 +381,9 @@ def create_structure(
     shiftX=0,
     shiftY=0,
     a=None,
-    island=0.
+    circle=0.,
+    square=0.,
+    triangle=0.
     ):
     """Create a borophene structure on a substrate
     
@@ -434,8 +436,12 @@ def create_structure(
         Shift borophene structure by (shiftX,shiftY) in Angstrom
     a : float
         If a is provided, use it as the lattice parameter of the metal slab, otherwise use the default one ({'Ag': 4.04, 'Au': 4.0782, 'Cu': 3.6149, 'Pt': 3.9242, 'Ni': 3.5240, 'Ir': 3.8390, 'Si': 5.4309}).
-    island : float
-        If island is provided, remove all B atoms outside a circle of radius island centered on the substrate center.
+    circle : float
+        If circle is provided, remove all B atoms outside a circle of radius `circle` centered on the substrate center.
+    square : float
+        If square is provided, remove all B atoms outside a square of side `square` centered on the substrate center.
+    triangle : float
+        If triangle is provided, remove all B atoms outside an equilateral triangle of side `triangle` centered on the substrate center.
     """
     # # # # # # # # # 
     # Create borophene polymorph
@@ -558,12 +564,37 @@ def create_structure(
             added += 1
     # Sort atoms to have B first
     struct = sort(struct, tags = struct.get_masses())
-    if island>0:
+    if circle>0:
         # center all positions
         a,b,c,alpha,beta,gamma = struct.cell.cellpar()
         struct.positions[:,0] -= a/2
         struct.positions[:,1] -= b/2
-        B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and (at.position[0]**2+at.position[1]**2)>(island/2)**2]
+        B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                       (at.position[0]**2+at.position[1]**2)>(circle/2)**2]
+        del struct[B_to_remove]
+        struct.positions[:,0] += a/2
+        struct.positions[:,1] += b/2
+    if square>0:
+        # center all positions
+        a,b,c,alpha,beta,gamma = struct.cell.cellpar()
+        struct.positions[:,0] -= a/2
+        struct.positions[:,1] -= b/2
+        B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                       (np.abs(at.position[0])>square or np.abs(at.position[1])>square)]
+        del struct[B_to_remove]
+        struct.positions[:,0] += a/2
+        struct.positions[:,1] += b/2
+    if triangle>0:
+        # center all positions
+        a,b,c,alpha,beta,gamma = struct.cell.cellpar()
+        struct.positions[:,0] -= a/2
+        struct.positions[:,1] -= b/2
+        delta = triangle/2/np.cos(np.pi/6)
+        B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                       ((at.position[1]) < -delta or 
+                        (-2*at.position[0] - at.position[1] + delta) < 0 or
+                        ( 2*at.position[0] - at.position[1] + delta) < 0
+                        )]
         del struct[B_to_remove]
         struct.positions[:,0] += a/2
         struct.positions[:,1] += b/2
