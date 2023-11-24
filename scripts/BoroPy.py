@@ -144,7 +144,9 @@ shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# Borophene island")
-island = st.sidebar.number_input("Borophene island diameter [Å]", min_value=0., max_value=None, value=0., step=5.)
+circle = st.sidebar.number_input("Borophene circular island diameter [Å]", min_value=0., max_value=None, value=0., step=5.)
+square = st.sidebar.number_input("Borophene square island size [Å]", min_value=0., max_value=None, value=0., step=5.)
+triangle = st.sidebar.number_input("Borophene triangular island size [Å]", min_value=0., max_value=None, value=0., step=5.)
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# For VASP output")
@@ -190,7 +192,9 @@ struct = create_structure(
     shiftX=shiftX,
     shiftY=shiftY,
     Nboro=Nboro,
-    island=island
+    circle=circle,
+    square=square,
+    triangle=triangle
 )
 
 base = create_structure(
