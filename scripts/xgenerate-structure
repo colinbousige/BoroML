@@ -49,7 +49,10 @@ def main(args):
     out         = args.out
     fixed       = args.fixed
     angle       = args.angle
-    island      = args.island
+    angleI      = args.angleI
+    circle      = args.circle
+    triangle    = args.triangle
+    square      = args.square
     rand        = np.abs(args.rand)
 
     if D is not None:
@@ -80,7 +83,10 @@ def main(args):
             glimpse     = False,
             a           = celpar,
             angle       = angle,
-            island      = island
+            circle      = circle,
+            triangle    = triangle,
+            square      = square,
+            angleI      = angleI
         )
     nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -177,8 +183,12 @@ def main(args):
 - Fixed layers            : {fixed}
 
 """)
-    if island > 0 :
-        sys.stderr.write(f"- Island diameter : {island} Å\n\n")
+    if circle > 0 :
+        sys.stderr.write(f"- Circular island diameter : {circle} Å\n\n")
+    if square > 0 :
+        sys.stderr.write(f"- Square island size : {square} Å\n\n")
+    if triangle > 0 :
+        sys.stderr.write(f"- Triangular island size : {triangle} Å\n\n")
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -258,8 +268,20 @@ def get_parser():
                         help    = "Max random motion in Å.",
                         type    = float,
                         default = 0)
-    parser.add_argument('--island', '-il',
-                        help    = "Borophene island diameter in Å. No island if set to 0.",
+    parser.add_argument('--square', '-sq',
+                        help    = "Borophene island (square) size in Å. No island if set to 0.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--circle', '-ci',
+                        help    = "Borophene island (circle) size in Å. No island if set to 0.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--triangle', '-tri',
+                        help    = "Borophene island (triangle) size in Å. No island if set to 0.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--angleI', '-ai',
+                        help    = "Borophene island rotation angle in degrees.",
                         type    = float,
                         default = 0)
     parser.add_argument('--out', '-out',
