@@ -144,9 +144,17 @@ shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# Borophene island")
-circle = st.sidebar.number_input("Borophene circular island diameter [Å]", min_value=0., max_value=None, value=0., step=5.)
-square = st.sidebar.number_input("Borophene square island size [Å]", min_value=0., max_value=None, value=0., step=5.)
-triangle = st.sidebar.number_input("Borophene triangular island size [Å]", min_value=0., max_value=None, value=0., step=5.)
+left, right = st.sidebar.columns((1, 1))
+island_size = left.number_input("Borophene island size [Å]", min_value=0., max_value=None, value=0., step=5.)
+island_shape = right.selectbox("Borophene island shape", ('Circle','Square','Triangle'))
+circle, triangle, square = 0, 0, 0
+if island_shape == 'Circle':
+    circle = island_size
+elif island_shape == 'Square':
+    square = island_size
+elif island_shape == 'Triangle':
+    triangle = island_size
+angleI = st.sidebar.number_input( "Rotate island [˚]", min_value=0., max_value=90., value=0., step=5., key="angleI")
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# For VASP output")
@@ -194,7 +202,8 @@ struct = create_structure(
     Nboro=Nboro,
     circle=circle,
     square=square,
-    triangle=triangle
+    triangle=triangle,
+    angleI=angleI
 )
 
 base = create_structure(
