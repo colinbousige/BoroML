@@ -53,7 +53,8 @@ Install all necessary libraries with `pip install -r requirements.txt`.
 
 - `BoroPy.py`:
   - Streamlit GUI tool to build and visualize borophene structures
-  - Usage: `streamlit run BoroPy.py`
+  - Usage (local): `streamlit run BoroPy.py`
+  - Or [online app](https://boroml-6lykqznd6cqcahzupk96cr.streamlit.app/) (3D view only works locally)
 - `generatorfunctions.py`:
   - Set of functions to generate borophene structures, write LAMMPS input files, etc. Called in other scripts.
 - `xgenerate-structure`:
