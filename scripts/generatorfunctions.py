@@ -17,6 +17,7 @@ from pathlib import Path
 
 metals = {'Ag': 4.0853,
           'Au': 4.0782,
+          'Al': 4.0495,
           'Cu': 3.6149,
           'Pt': 3.9242,
           'Ni': 3.5240,
@@ -381,10 +382,9 @@ def create_structure(
     shiftX=0,
     shiftY=0,
     a=None,
-    circle=0.,
-    square=0.,
-    triangle=0.,
-    angleI=0.
+    island_size=0.,
+    island_shape='circle',
+    island_angle=0.
     ):
     """Create a borophene structure on a substrate
     
@@ -437,13 +437,11 @@ def create_structure(
         Shift borophene structure by (shiftX,shiftY) in Angstrom
     a : float
         If a is provided, use it as the lattice parameter of the metal slab, otherwise use the default one ({'Ag': 4.04, 'Au': 4.0782, 'Cu': 3.6149, 'Pt': 3.9242, 'Ni': 3.5240, 'Ir': 3.8390, 'Si': 5.4309}).
-    circle : float
-        If circle is provided, remove all B atoms outside a circle of radius `circle` centered on the substrate center.
-    square : float
-        If square is provided, remove all B atoms outside a square of side `square` centered on the substrate center.
-    triangle : float
-        If triangle is provided, remove all B atoms outside an equilateral triangle of side `triangle` centered on the substrate center.
-    angleI : float
+    island_size : float
+        If island_size>0 is provided, remove all B atoms outside a surface of shape island_shape and size island_size centered on the substrate center.
+    island_shape : str, one of ('circle', 'square', 'triangle')
+        If island_size>0 is provided, remove all B atoms outside a surface of shape island_shape and size island_size centered on the substrate center.
+    island_angle : float
         Rotation of the borophene island (in degrees) with respect to the substrate
     """
     # # # # # # # # # 
@@ -486,13 +484,72 @@ def create_structure(
         structa = struct.cell[0,0]
         structb = struct.cell[1,1]
         structc = struct.cell[2,2]
-    # Shift borophene position with respect to substrate
-    if shiftX > 0:
-        struct.positions[:,0] += shiftX
-        struct.positions[:,0] = struct.positions[:,0] % structa
-    if shiftY > 0:
-        struct.positions[:,1] += shiftY
-        struct.positions[:,1] = struct.positions[:,1] % structb
+    # Borophene island
+    if island_size>0:
+        # center all positions
+        structa,structb = struct.cell.cellpar()[:2]
+        struct.positions[:,0] -= structa/2
+        struct.positions[:,1] -= structb/2
+        if island_shape == 'circle':
+            B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                        (at.position[0]**2+at.position[1]**2)>(island_size/2)**2]
+        if island_shape == 'square':
+            # square summits coordinates
+            delta = island_size*np.sqrt(2)/2
+            A = (delta*np.cos(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*0), delta*np.sin(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*0))
+            B = (delta*np.cos(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*1), delta*np.sin(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*1))
+            C = (delta*np.cos(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*2), delta*np.sin(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*2))
+            D = (delta*np.cos(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*3), delta*np.sin(island_angle*np.pi/180 + np.pi/4 + 2*np.pi/4*3))
+            ABslope = (A[1]-B[1])/(A[0]-B[0])
+            BCslope = (B[1]-C[1])/(B[0]-C[0])
+            CDslope = (C[1]-D[1])/(C[0]-D[0])
+            DAslope = (D[1]-A[1])/(D[0]-A[0])
+            ABintercept = A[1] - ABslope*A[0]
+            BCintercept = B[1] - BCslope*B[0]
+            CDintercept = C[1] - CDslope*C[0]
+            DAintercept = D[1] - DAslope*D[0]
+            # Remove atoms outside the triangle
+            if island_angle == 0:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                        (np.abs(at.position[0])>=ABintercept or 
+                         np.abs(at.position[1])>=ABintercept)]
+            else:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] <= CDslope*at.position[0]+CDintercept or
+                             at.position[1] >= DAslope*at.position[0]+DAintercept)]
+        if island_shape == 'triangle':
+            # Triangle summits coordinates
+            delta = island_size/2/np.cos(np.pi/6)
+            A = (delta*np.cos(island_angle*np.pi/180)            , delta*np.sin(island_angle*np.pi/180))
+            B = (delta*np.cos(island_angle*np.pi/180 + 2*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 2*np.pi/3))
+            C = (delta*np.cos(island_angle*np.pi/180 + 4*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 4*np.pi/3))
+            ABslope = (A[1]-B[1])/(A[0]-B[0])
+            BCslope = (B[1]-C[1])/(B[0]-C[0])
+            ACslope = (A[1]-C[1])/(A[0]-C[0])
+            ABintercept = A[1] - ABslope*A[0]
+            BCintercept = B[1] - BCslope*B[0]
+            ACintercept = A[1] - ACslope*A[0]
+            # Remove atoms outside the triangle
+            if island_angle == 0:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[0] <= -delta/2 or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle <= 60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle>60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] >= ACslope*at.position[0]+ACintercept)]
+        del struct[B_to_remove]
+        struct.positions[:,0] += structa/2
+        struct.positions[:,1] += structb/2
     # # # # # # # # #
     # Substrate
     # # # # # # # # #
@@ -510,31 +567,29 @@ def create_structure(
                     a = celpar, orthogonal = True)
         # Define the new unit cell by matching borophene on the slab:
         # get slab parameters a and b
-        slaba = slab.cell[0,0]
-        slabb = slab.cell[1,1]
+        slaba,slabb = slab.cell.cellpar()[:2]
         # get borophene parameters a, b and c
-        structa = struct.cell[0,0]
-        structb = struct.cell[1,1]
-        structc = struct.cell[2,2]
+        structa,structb,structc = struct.cell.cellpar()[:3]
         # make slab supercell to match closely the borophene
         slab = make_supercell(
                 slab, [[np.round(structa/slaba), 0, 0],
-                        [0, np.round(structb/slabb), 0],
-                        [0, 0, 1]])
+                       [0, np.round(structb/slabb), 0],
+                       [0, 0, 1]])
         cella = slab.cell[0, 0]
         cellb = slab.cell[1, 1]
         cellc = slab.cell[2, 2]
         # Rescale borophene atoms positions to fit the slab
-        struct.positions[:, 0] = struct.positions[:, 0] / structa * cella
-        struct.positions[:, 1] = struct.positions[:, 1] / structb * cellb
+        if island_size == 0:
+            struct.positions[:, 0] = struct.positions[:, 0] / structa * cella
+            struct.positions[:, 1] = struct.positions[:, 1] / structb * cellb
         # define new cell parameters for the slab
         slab.set_cell([ [cella,0,0],
                         [0,cellb,0],
                         [0,0,cellc] ])
         # define new cell parameters for the borophene
         struct.set_cell([[cella,0,0],
-                            [0,cellb,0],
-                            [0,0,structc]])
+                         [0,cellb,0],
+                         [0,0,structc]])
         # define new structure with the borophene sheet on top of the slab
         struct.positions[:,2] = struct.positions[:,2] + max(slab.positions[:,2]) + vdwdist
         struct = struct + slab
@@ -567,73 +622,14 @@ def create_structure(
             added += 1
     # Sort atoms to have B first
     struct = sort(struct, tags = struct.get_masses())
-    if circle or square or triangle:
-        # center all positions
-        a,b,c,alpha,beta,gamma = struct.cell.cellpar()
-        struct.positions[:,0] -= a/2
-        struct.positions[:,1] -= b/2
-        if circle:
-            B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-                        (at.position[0]**2+at.position[1]**2)>(circle/2)**2]
-        if square:
-            # B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-            #             (np.abs(at.position[0])>square/2 or np.abs(at.position[1])>square/2)]
-            # square summits coordinates
-            delta = square*np.sqrt(2)/2
-            A = (delta*np.cos(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*0), delta*np.sin(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*0))
-            B = (delta*np.cos(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*1), delta*np.sin(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*1))
-            C = (delta*np.cos(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*2), delta*np.sin(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*2))
-            D = (delta*np.cos(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*3), delta*np.sin(angleI*np.pi/180 + np.pi/4 + 2*np.pi/4*3))
-            ABslope = (A[1]-B[1])/(A[0]-B[0])
-            BCslope = (B[1]-C[1])/(B[0]-C[0])
-            CDslope = (C[1]-D[1])/(C[0]-D[0])
-            DAslope = (D[1]-A[1])/(D[0]-A[0])
-            ABintercept = A[1] - ABslope*A[0]
-            BCintercept = B[1] - BCslope*B[0]
-            CDintercept = C[1] - CDslope*C[0]
-            DAintercept = D[1] - DAslope*D[0]
-            # Remove atoms outside the triangle
-            if angleI == 0:
-                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-                        (np.abs(at.position[0])>=ABintercept or 
-                         np.abs(at.position[1])>=ABintercept)]
-            else:
-                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
-                             at.position[1] <= BCslope*at.position[0]+BCintercept or
-                             at.position[1] <= CDslope*at.position[0]+CDintercept or
-                             at.position[1] >= DAslope*at.position[0]+DAintercept)]
-        if triangle:
-            # Triangle summits coordinates
-            delta = triangle/2/np.cos(np.pi/6)
-            A = (delta*np.cos(angleI*np.pi/180)            , delta*np.sin(angleI*np.pi/180))
-            B = (delta*np.cos(angleI*np.pi/180 + 2*np.pi/3), delta*np.sin(angleI*np.pi/180 + 2*np.pi/3))
-            C = (delta*np.cos(angleI*np.pi/180 + 4*np.pi/3), delta*np.sin(angleI*np.pi/180 + 4*np.pi/3))
-            ABslope = (A[1]-B[1])/(A[0]-B[0])
-            BCslope = (B[1]-C[1])/(B[0]-C[0])
-            ACslope = (A[1]-C[1])/(A[0]-C[0])
-            ABintercept = A[1] - ABslope*A[0]
-            BCintercept = B[1] - BCslope*B[0]
-            ACintercept = A[1] - ACslope*A[0]
-            # Remove atoms outside the triangle
-            if angleI == 0:
-                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and
-                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
-                                at.position[0] <= -delta/2 or
-                                at.position[1] <= ACslope*at.position[0]+ACintercept)]
-            elif angleI <= 60:
-                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
-                                at.position[1] <= BCslope*at.position[0]+BCintercept or
-                                at.position[1] <= ACslope*at.position[0]+ACintercept)]
-            elif angleI>60:
-                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
-                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
-                                at.position[1] <= BCslope*at.position[0]+BCintercept or
-                                at.position[1] >= ACslope*at.position[0]+ACintercept)]
-        del struct[B_to_remove]
-        struct.positions[:,0] += a/2
-        struct.positions[:,1] += b/2
+    # Shift borophene position with respect to substrate
+    Bid = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+    if np.abs(shiftX) > 0:
+        struct.positions[Bid,0] += shiftX
+        struct.positions[Bid,0] = struct.positions[Bid,0] % structa
+    if np.abs(shiftY) > 0:
+        struct.positions[Bid,1] += shiftY
+        struct.positions[Bid,1] = struct.positions[Bid,1] % structb
     # View structure with ASE
     if glimpse:
         view(struct)

@@ -17,7 +17,8 @@ import pandas as pd
 from io import StringIO 
 import sys
 from pathlib import Path, PurePath
-
+import py3Dmol
+from stmol import showmol
 
 class Capturing(list):
     def __enter__(self):
@@ -28,6 +29,26 @@ class Capturing(list):
         self.extend(self._stringio.getvalue().splitlines())
         del self._stringio    # free up some memory
         sys.stdout = self._stdout
+
+def write_pdb(struct, name=""):
+    a, b, c, alpha, beta, gamma = struct.cell.cellpar() 
+    out  = "TITLE       " + name + "\n"
+    out += "CRYST1{:9.3f}{:9.3f}{:9.3f}{:7.2f}{:7.2f}{:7.2f} P 1           1\n".format(a,b,c,alpha,beta,gamma)
+    boron = struct[struct.get_atomic_numbers() == 5]
+    metal = struct[struct.get_atomic_numbers() != 5]
+    for i, (at, x, y, z) in enumerate(zip(
+        boron.get_chemical_symbols(), boron.positions[:,0], boron.positions[:,1], boron.positions[:,2])):
+        out += "ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1,at,x,y,z,at)
+    for i, (at, x, y, z) in enumerate(zip(
+        metal.get_chemical_symbols(), metal.positions[:,0], metal.positions[:,1], metal.positions[:,2])):
+        out += "ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1+len(boron),at,x,y,z,at)
+    pairs = np.array(list(itertools.combinations(range(len(boron)),2)))
+    dr = distance.pdist(boron.positions)
+    connected = pairs[dr<1.9]
+    for i, j in connected:
+        out +=  "CONECT{:5d}{:5d}\n".format(i+1,j+1)
+        out += "ENDMDL\n"
+    return out
 
 
 dico_predef = {'\u03b1'  :(3,3,[0,10]), #alpha
@@ -73,10 +94,20 @@ st.set_page_config(
     }
 )
 padding_top = 0
+css = '''
+<style>
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+    font-size:2rem;
+    }
+</style>
+'''
 
 st.markdown(
     f"""
     <style>
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
+    font-size:1.7rem;
+    }}
     [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {{
         width: 500px;
     }}
@@ -131,7 +162,7 @@ size_min = col3.number_input("Min size of the box [Å]", min_value=0., max_value
 
 st.sidebar.write("# Metal Slab")
 left, mid, right = st.sidebar.columns((1, 1, 1))
-metalchoice = left.selectbox("Metal", ('', 'Ag', 'Au', 'Cu', 'Pt', 'Ni', 'Ir', 'Si'))
+metalchoice = left.selectbox("Metal", ('', 'Ag', 'Al', 'Au', 'Cu', 'Pt', 'Ni', 'Ir', 'Si'))
 surfchoice = mid.selectbox("Surface", ('fcc111', 'fcc110', 'fcc100', 'fcc211', 'diamond100'))
 NZ = right.number_input("Number of metal layers", min_value=0, max_value=None, value=3)
 left, right = st.sidebar.columns((1, 1))
@@ -139,30 +170,15 @@ vac = left.number_input("Add vaccum layer on top [Å]", min_value=0., max_value=
 vdwdist = right.number_input("Van der Waals distance [Å]", min_value=0., max_value=None, value=2.5)
 angle = left.selectbox( "Rotate borophene [˚]", (0, 90), index=0, key="angle")
 random = right.number_input("Add random motion of max value [Å]", min_value=0., max_value=None, value=0.)
-shiftX = left.number_input("Shift Borophene X [Å]", min_value=None, max_value=None, value=0., step=.1)
-shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=None, value=0., step=.1)
+shiftX = left.number_input("Shift Borophene X [Å]", min_value=None, max_value=None, value=0., step=5.)
+shiftY = right.number_input("Shift Borophene Y [Å]", min_value=None, max_value=None, value=0., step=5.)
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# Borophene island")
 left, right = st.sidebar.columns((1, 1))
 island_size = left.number_input("Borophene island size [Å]", min_value=0., max_value=None, value=0., step=5.)
 island_shape = right.selectbox("Borophene island shape", ('Circle','Square','Triangle'))
-circle, triangle, square = 0, 0, 0
-if island_shape == 'Circle':
-    circle = island_size
-elif island_shape == 'Square':
-    square = island_size
-elif island_shape == 'Triangle':
-    triangle = island_size
-angleI = st.sidebar.number_input( "Rotate island [˚]", min_value=0., max_value=90., value=0., step=5., key="angleI")
-
-# # # # # # # # # # # # # # # # # # 
-st.sidebar.write("# For VASP output")
-fixed = st.sidebar.number_input("Fixed number of layers", 
-                                min_value=0, max_value=None, 
-                                value=0, step=1)
-
-st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
+island_angle = st.sidebar.number_input( "Rotate island [˚]", min_value=0., max_value=90., value=0., step=5., key="island_angle")
 
 # # # # # # # # # # # # # # # # # # 
 # Plotting
@@ -173,9 +189,10 @@ show_bonds = c2.checkbox("Show bonds", value=True)
 show_numbers = c2.checkbox("Show numbers")
 Nrepx = c2.number_input("Repeat x", min_value=1, max_value=None, value= 1)
 Nrepy = c2.number_input("Repeat y", min_value=1, max_value=None, value= 1)
-size = c2.slider("Point size", min_value=0, max_value=100, value=100, step=1, key="size")
-fsize = c2.slider("Font size", min_value=0, max_value=10, value=5, step=1, key="fsize")
-view3d = c2.button("3D View")
+size = c2.slider("Point size 2D view", min_value=0, max_value=100, value=100, step=1, key="size")
+fsize = c2.slider("Font size 2D view", min_value=0, max_value=10, value=5, step=1, key="fsize")
+width3d = c2.slider("Width 3D view", min_value=10, max_value=1200, value=450, step=10, key="width3d")
+height3d = c2.slider("Height 3D view", min_value=10, max_value=1200, value=400, step=10, key="height3d")
 
 if ny==1:
     metalchoice=''
@@ -200,10 +217,9 @@ struct = create_structure(
     shiftX=shiftX,
     shiftY=shiftY,
     Nboro=Nboro,
-    circle=circle,
-    square=square,
-    triangle=triangle,
-    angleI=angleI
+    island_size =island_size,
+    island_shape=island_shape.lower(),
+    island_angle=island_angle
 )
 
 base = create_structure(
@@ -254,50 +270,70 @@ structfull = structfull[np.array(structfull.get_chemical_symbols())=="B"]
 sortedpos = np.lexsort((structfull.positions[:, 1], structfull.positions[:, 0]))
 structfull.positions = structfull.positions[sortedpos]
 
-if fixed > 0:
-    c = FixAtoms(mask=struct.positions[:,2] <= 2.35*(fixed-1)+1.2)
-    struct.set_constraint(c)
+tab1, tab2 = c1.tabs(["2D view", "3D view"])
+collist = {'Ag':'silver', 'Al':'lightgrey', 'Au':'gold', 'Cu':'#fdb07d', 
+           'Pt':'lightgrey', 'Ni':'#fed776', 'Ir':'lightgrey', 'Si':'lightgrey'}
 
-if view3d:
-    view(struct)
+with tab1:
+    fig = plt.figure()
+    # define plot organization
+    ax = fig.add_subplot(1,1,1)
+    # retrieve lattice parameters and define new repeated structure with the original unit cell
+    a = struct.cell[0,0]
+    b = struct.cell[1,1]
+    structrep = struct.repeat((Nrepx,Nrepy,1))
+    structrep.set_cell(struct.cell)
+    boron = structrep[structrep.get_atomic_numbers()==5] #get boron atoms
+    metal = structrep[structrep.get_atomic_numbers()!=5] #get metal atoms
+    if metalchoice!='':
+        ax.scatter(metal.positions[:, 0], metal.positions[:, 1], c=collist[metalchoice],
+            zorder=1, s=200*size/100, edgecolor='black', linewidth=0.5)
+    if show_bonds:
+        # compute all possible pairs of boron
+        pairs = np.array(list(itertools.combinations(
+            range(boron.get_global_number_of_atoms()), 2)))
+        # compute all distances between boron atoms
+        dr = distance.pdist(boron.positions)
+        for i, j in pairs[dr<2.1]:
+            # for each bond, define the segment of the bond to plot
+            x = [boron.positions[i,0], boron.positions[j,0]]
+            y = [boron.positions[i,1], boron.positions[j,1]]
+            # plot the segment (bond)
+            ax.plot(x, y, c='pink',linewidth=1.5, zorder=1)
+    # plot the atoms
+    ax.scatter(boron.positions[:,0],boron.positions[:,1], c='pink', zorder=2, s=120*size/100, edgecolor='black', linewidth=0.5)
+    # plot the unit cell
+    ax.plot([0,a,a,0,0], [0,0,b,b,0], c='darkgray',linewidth=1, zorder=3, linestyle='--')
+    if show_numbers:
+        for i, pos in enumerate(structfull.positions[structfull.get_atomic_numbers()==5]):
+            ax.text(pos[0],pos[1],str(i),horizontalalignment='center',
+            verticalalignment='center',fontsize=fsize, color="black")
+    # remove black border
+    ax.axis('off')
+    ax.set_aspect('equal', 'datalim')
+    # define plot range
+    st.pyplot(fig)
 
-fig = plt.figure()
-# define plot organization
-ax = fig.add_subplot(1,1,1)
-# retrieve lattice parameters and define new repeated structure with the original unit cell
-a = struct.cell[0,0]
-b = struct.cell[1,1]
-structrep = struct.repeat((Nrepx,Nrepy,1))
-structrep.set_cell(struct.cell)
-boron = structrep[structrep.get_atomic_numbers()==5] #get boron atoms
-metal = structrep[structrep.get_atomic_numbers()!=5] #get metal atoms
-ax.scatter(metal.positions[:, 0], metal.positions[:, 1], c='darkgray',
-           zorder=1, s=200*size/100, edgecolor='black', linewidth=0.5)
-if show_bonds:
-    # compute all possible pairs of boron
-    pairs = np.array(list(itertools.combinations(
-        range(boron.get_global_number_of_atoms()), 2)))
-    # compute all distances between boron atoms
-    dr = distance.pdist(boron.positions)
-    for i, j in pairs[dr<2.1]:
-        # for each bond, define the segment of the bond to plot
-        x = [boron.positions[i,0], boron.positions[j,0]]
-        y = [boron.positions[i,1], boron.positions[j,1]]
-        # plot the segment (bond)
-        ax.plot(x, y, c='pink',linewidth=1.5, zorder=1)
-# plot the atoms
-ax.scatter(boron.positions[:,0],boron.positions[:,1], c='pink', zorder=2, s=120*size/100, edgecolor='black', linewidth=0.5)
-# plot the unit cell
-ax.plot([0,a,a,0,0], [0,0,b,b,0], c='darkgray',linewidth=1, zorder=3, linestyle='--')
-if show_numbers:
-    for i, pos in enumerate(structfull.positions[structfull.get_atomic_numbers()==5]):
-        ax.text(pos[0],pos[1],str(i),horizontalalignment='center',
-        verticalalignment='center',fontsize=fsize, color="black")
-# remove black border
-ax.axis('off')
-ax.set_aspect('equal', 'datalim')
-# define plot range
-c1.pyplot(fig)
+with tab2:
+    system = write_pdb(struct.repeat((Nrepx,Nrepy,1)))
+    atB = {'atom':'B'}
+    xyzview = py3Dmol.view(width=width3d, height=height3d)
+    xyzview.addModelsAsFrames(str(system))
+    if metalchoice!='':
+        xyzview.setStyle({'sphere':{'color':collist[metalchoice]}})
+    if show_bonds:
+        xyzview.setStyle(atB,{'stick': {'color':'red', 'radius':0.2, 'opacity':0.9}, 
+                              'sphere':{'color':'red', 'radius':1, 
+                                        'opacity':0.9, 'scale':0.5}})
+    else:
+        xyzview.setStyle(atB,{'sphere':{'color':'red', 'radius':1, 
+                                        'opacity':0.9, 'scale':0.5}})
+    xyzview.setBackgroundColor('white')
+    xyzview.addUnitCell({'box':{'color':'purple'}})
+    xyzview.replicateUnitCell(Nrepx, Nrepy, 1, addBonds=True)
+    xyzview.spin(False)
+    xyzview.zoomTo()
+    showmol(xyzview, width=width3d, height=height3d)
 
 # Show table with info
 a = np.round(struct.cell[0,0],4)
@@ -342,23 +378,7 @@ def writeout(struct, extension_out):
             write_lammps(None, struct, atom_style="charge", units="real")
     elif extension_out=='PDB': 
         with Capturing() as outfile:
-            a, b, c, alpha, beta, gamma = struct.get_cell_lengths_and_angles()
-            sys.stdout.write("TITLE       " + name + "\n")
-            sys.stdout.write("CRYST1{:9.3f}{:9.3f}{:9.3f}{:7.2f}{:7.2f}{:7.2f} P 1           1\n".format(a,b,c,alpha,beta,gamma));
-            boron = struct[struct.get_atomic_numbers() == 5]
-            metal = struct[struct.get_atomic_numbers() != 5]
-            for i, (at, x, y, z) in enumerate(zip(
-                boron.get_chemical_symbols(), boron.positions[:,0], boron.positions[:,1], boron.positions[:,2])):
-                sys.stdout.write("ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1,at,x,y,z,at));
-            for i, (at, x, y, z) in enumerate(zip(
-                metal.get_chemical_symbols(), metal.positions[:,0], metal.positions[:,1], metal.positions[:,2])):
-                sys.stdout.write("ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1+len(boron),at,x,y,z,at));
-            pairs = np.array(list(itertools.combinations(range(len(boron)),2)))
-            dr = distance.pdist(boron.positions)
-            connected = pairs[dr<1.9]
-            for i, j in connected:
-                sys.stdout.write( "CONECT{:5d}{:5d}\n".format(i+1,j+1) )
-                sys.stdout.write("ENDMDL\n")
+            sys.stdout.write(write_pdb(struct, name=name))
     else:
         with Capturing() as outfile:
             write(sys.stdout, struct, format=formlist[extension_out])
@@ -368,6 +388,16 @@ c3.write("""
 ## Output options
 """)
 extension_out = c3.selectbox("File format", ('VASP', 'xyz', 'LAMMPS', 'PDB'))
+
+c3.write("### For VASP output")
+fixed = c3.number_input("Fixed number of layers", 
+                         min_value=0, max_value=None, 
+                         value=0, step=1)
+if fixed > 0:
+    c = FixAtoms(mask=struct.positions[:,2] <= 2.35*(fixed-1)+1.2)
+    struct.set_constraint(c)
+
+c3.markdown("<br><br>", unsafe_allow_html=True)
 
 outfile,name = writeout(struct, extension_out)
 
