@@ -39,6 +39,7 @@ This archive contains various files and scripts linked with the article:
     ├── requirements.txt
     ├── xGDOS
     ├── xLAMMPStoNNP
+    ├── xOUTCARtoLAMMPS
     ├── xSTM
     ├── xconvert
     ├── xgenerate-structure
@@ -73,6 +74,9 @@ Install all necessary libraries with `pip install -r requirements.txt`.
 - `xLAMMPStoNNP`:
   - Convert and concatenante many dump files into a single file to use with N2P2. Also look for structure generating extrapolation warnings and store them apart.
   - Usage: `python xLAMMPStoNNP -h` to get the help
+- `xOUTCARtoLAMMPS`:
+  - Convert an OUTCAR trjectory file into a LAMMPS dump file
+  - Usage: `python xOUTCARtoLAMMPS -h` to get the help
 - `xSTM`:
   - Compute an STM image from a CHGCAR or PARCHGCAR file
   - Usage: `python xSTM -h` to get the help
