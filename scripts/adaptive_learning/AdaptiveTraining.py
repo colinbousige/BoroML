@@ -473,12 +473,15 @@ class AdaptiveTraining:
 
     def read_stock(self):
         """
-        Read initial stock file
+        Read initial stock file, and copy structures already computed at DFT level in /vasp
         """
         # # # # # # # # # # # # 
-        atoms, comments = read_inputdata(f"{self.path}/NNP1/predict/input.data")
+        atoms, comments = read_inputdata(filename  = f"{self.path}/NNP1/predict/input.data",
+                                         copy_data = f"{self.path}/vasp")
         id = [i for i in range(len(atoms))]
-        return({'id':id, 'structures':atoms, 'comments':comments})
+        return({'id':id, 
+                'structures':atoms, 
+                'comments':comments})
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
@@ -490,7 +493,7 @@ class AdaptiveTraining:
         for i in numbers:
             write(f"{outputfolder}/POSCAR_{self.stock['id'][i]}", 
                   self.stock['structures'][i], 
-                  format = "vasp", vasp5=True)
+                  format = "vasp", vasp5 = True)
         return([self.stock['id'][i] for i in numbers])
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
