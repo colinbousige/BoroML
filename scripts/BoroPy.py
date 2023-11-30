@@ -105,9 +105,28 @@ css = '''
 st.markdown(
     f"""
     <style>
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
-    font-size:1.7rem;
+    .stTabs [data-baseweb="tab-list"] {{
+		gap: 10px;
     }}
+
+	.stTabs [data-baseweb="tab"] {{
+		height: 50px;
+        white-space: pre-wrap;
+		background-color: #F0F2F6;
+		border-radius: 5px 5px 0px 0px;
+		gap: 1px;
+		padding: 10px;
+    }}
+
+	.stTabs [aria-selected="false"] {{
+  		background-color: #FFFFFF;
+	}}
+ 
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
+        font-size:1.7rem;
+        font-weight: bold;
+    }}
+    
     [data-testid="stSidebar"][aria-expanded="true"] > div:first-child {{
         width: 500px;
     }}
@@ -134,7 +153,7 @@ st.write("""
 # # # # # # # # # # # # # # # # # # 
 # Borophene Structure
 # # # # # # # # # # # # # # # # # # 
-c1, c2, c3 = st.columns((3, 1, 1))
+c1, outcol = st.columns((4, 1))
 
 st.sidebar.write("# Borophene Lattice")
 
@@ -179,20 +198,6 @@ left, right = st.sidebar.columns((1, 1))
 island_size = left.number_input("Borophene island size [Å]", min_value=0., max_value=None, value=0., step=5.)
 island_shape = right.selectbox("Borophene island shape", ('Circle','Square','Triangle'))
 island_angle = st.sidebar.number_input( "Rotate island [˚]", min_value=0., max_value=90., value=0., step=5., key="island_angle")
-
-# # # # # # # # # # # # # # # # # # 
-# Plotting
-# # # # # # # # # # # # # # # # # # 
-
-c2.write("## Plotting options")
-show_bonds = c2.checkbox("Show bonds", value=True)
-show_numbers = c2.checkbox("Show numbers")
-Nrepx = c2.number_input("Repeat x", min_value=1, max_value=None, value= 1)
-Nrepy = c2.number_input("Repeat y", min_value=1, max_value=None, value= 1)
-size = c2.slider("Point size 2D view", min_value=0, max_value=100, value=100, step=1, key="size")
-fsize = c2.slider("Font size 2D view", min_value=0, max_value=10, value=5, step=1, key="fsize")
-width3d = c2.slider("Width 3D view", min_value=10, max_value=1200, value=450, step=10, key="width3d")
-height3d = c2.slider("Height 3D view", min_value=10, max_value=1200, value=400, step=10, key="height3d")
 
 if ny==1:
     metalchoice=''
@@ -270,11 +275,23 @@ structfull = structfull[np.array(structfull.get_chemical_symbols())=="B"]
 sortedpos = np.lexsort((structfull.positions[:, 1], structfull.positions[:, 0]))
 structfull.positions = structfull.positions[sortedpos]
 
-tab1, tab2 = c1.tabs(["2D view", "3D view"])
+tab1, tab2, tab3 = c1.tabs(["2D view", "3D view", "Output"])
 collist = {'Ag':'silver', 'Al':'lightgrey', 'Au':'gold', 'Cu':'#fdb07d', 
            'Pt':'lightgrey', 'Ni':'#fed776', 'Ir':'lightgrey', 'Si':'lightgrey'}
 
+
 with tab1:
+    # # # # # # # # # # # # # # # # # # 
+    # Plotting
+    # # # # # # # # # # # # # # # # # # 
+    left1, right1 = st.columns((3, 1))
+    show_bonds = right1.checkbox("Show bonds", value=True)
+    show_numbers = right1.checkbox("Show numbers")
+    Nrepx = right1.number_input("Repeat x", min_value=1, max_value=None, value= 1)
+    Nrepy = right1.number_input("Repeat y", min_value=1, max_value=None, value= 1)
+    size = right1.slider("Point size", min_value=0, max_value=100, value=100, step=1, key="size")
+    fsize = right1.slider("Font size", min_value=0, max_value=10, value=5, step=1, key="fsize")
+    
     fig = plt.figure()
     # define plot organization
     ax = fig.add_subplot(1,1,1)
@@ -312,44 +329,58 @@ with tab1:
     ax.axis('off')
     ax.set_aspect('equal', 'datalim')
     # define plot range
-    st.pyplot(fig)
+    left1.pyplot(fig)
 
 with tab2:
+    # # # # # # # # # # # # # # # # # # 
+    # Plotting
+    # # # # # # # # # # # # # # # # # # 
+    t2l, t2r = st.columns((3, 1))
+    width3d = t2r.slider("Width", min_value=10, max_value=1200, value=450, step=10, key="width3d")
+    height3d = t2r.slider("Height", min_value=10, max_value=1200, value=400, step=10, key="height3d")
+    
     system = write_pdb(struct.repeat((Nrepx,Nrepy,1)))
     atB = {'atom':'B'}
     xyzview = py3Dmol.view(width=width3d, height=height3d)
     xyzview.addModelsAsFrames(str(system))
     if metalchoice!='':
         xyzview.setStyle({'sphere':{'color':collist[metalchoice]}})
-    if show_bonds:
-        xyzview.setStyle(atB,{'stick': {'color':'red', 'radius':0.2, 'opacity':0.9}, 
-                              'sphere':{'color':'red', 'radius':1, 
-                                        'opacity':0.9, 'scale':0.5}})
-    else:
-        xyzview.setStyle(atB,{'sphere':{'color':'red', 'radius':1, 
-                                        'opacity':0.9, 'scale':0.5}})
+    xyzview.setStyle(atB,{'stick': {'color':'red', 'radius':0.2, 'opacity':0.9}, 
+                          'sphere':{'color':'red', 'radius':1, 
+                                    'opacity':0.9, 'scale':0.5}})
     xyzview.setBackgroundColor('white')
     xyzview.addUnitCell({'box':{'color':'purple'}})
     xyzview.replicateUnitCell(Nrepx, Nrepy, 1, addBonds=True)
     xyzview.spin(False)
-    xyzview.zoomTo()
-    showmol(xyzview, width=width3d, height=height3d)
+    xyzview.zoomTo(atB)
+    with t2l:
+        showmol(xyzview, width=width3d, height=height3d)
 
 # Show table with info
-a = np.round(struct.cell[0,0],4)
-b = np.round(struct.cell[1,1],4)
-c = np.round(struct.cell[2,2],4)
+a = str(np.round(struct.cell[0,0],4))
+b = str(np.round(struct.cell[1,1],4))
+c = str(np.round(struct.cell[2,2],4))
 mx = f"{(struct.get_cell()[0][0]-base.get_cell()[0][0])/base.get_cell()[0][0]*100:.2f} %"
 my = f"{(struct.get_cell()[1][1]-base.get_cell()[1][1])/base.get_cell()[1][1]*100:.2f} %"
 hd = Fraction(len(listholes), (2*nx*ny))
-df = pd.DataFrame(
-    [[a,b,c, len(struct), len(boron), len(metal), f"{hd.numerator}/{hd.denominator}"]],
-    columns=('a [Å]', 'b [Å]', 'c [Å]', 'Ntotal', 'Nboro', 'Nmetal','Hole density'))
-c1.table(df)
-df = pd.DataFrame(
-    [[mx, my]],
-    columns=('Borophene deformation along x', 'Borophene deformation along y'))
-c1.table(df)
+outcol.write("##### Cell Info")
+if metalchoice!='':
+    df = pd.DataFrame({'':['a [Å]', 'b [Å]', 'c [Å]', 'N<sub>total</sub>', 'N<sub>B</sub>', f'N<sub>{metalchoice}</sub>','Hole density'],
+                    'b':[a,b,c, len(struct), len(boron), len(metal), f"{hd.numerator}/{hd.denominator}"]})
+else:
+    df = pd.DataFrame({'':['a [Å]', 'b [Å]', 'c [Å]', 'N<sub>total</sub>', 'N<sub>B</sub>', 'Hole density'],
+                       'b':[a,b,c, len(struct), len(boron), f"{hd.numerator}/{hd.denominator}"]})
+style = df.style.hide_index()
+style.hide_columns()
+outcol.write(style.to_html(), unsafe_allow_html=True)
+outcol.write("")
+outcol.write("##### Borophene deformation")
+df = pd.DataFrame({'':['x', 'y'],
+                   'Borophene deformation': [mx, my]})
+style = df.style.hide_index()
+style.hide_columns()
+outcol.write(style.to_html(), unsafe_allow_html=True)
+
 
 # # # # # # # # # # # # # # # # # # 
 # OUTPUT
@@ -384,26 +415,28 @@ def writeout(struct, extension_out):
             write(sys.stdout, struct, format=formlist[extension_out])
     return("\n".join(outfile),name)
 
-c3.write("""
-## Output options
-""")
-extension_out = c3.selectbox("File format", ('VASP', 'xyz', 'LAMMPS', 'PDB'))
+with tab3:
+    st.write("""
+    ## Output options
+    """)
+    extension_out = st.selectbox("File format", ('VASP', 'xyz', 'LAMMPS', 'PDB'))
 
-c3.write("### For VASP output")
-fixed = c3.number_input("Fixed number of layers", 
-                         min_value=0, max_value=None, 
-                         value=0, step=1)
-if fixed > 0:
-    c = FixAtoms(mask=struct.positions[:,2] <= 2.35*(fixed-1)+1.2)
-    struct.set_constraint(c)
+    if extension_out=='VASP':
+        st.write("### For VASP output")
+        fixed = st.number_input("Fixed number of layers", 
+                                min_value=0, max_value=NZ+1, 
+                                value=NZ-1, step=1)
+        if fixed > 0:
+            c = FixAtoms(mask=struct.positions[:,2] <= 2.35*(fixed-1)+1.2)
+            struct.set_constraint(c)
 
-c3.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
-outfile,name = writeout(struct, extension_out)
+    outfile,name = writeout(struct, extension_out)
 
-c3.download_button(
-    label     = "Download Output file",
-    data      = outfile,
-    file_name = name,
-    mime      = 'text/csv',
-)
+    st.download_button(
+        label     = "Download Output file",
+        data      = outfile,
+        file_name = name,
+        mime      = 'text/csv',
+    )
