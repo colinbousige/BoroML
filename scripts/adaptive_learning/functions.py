@@ -1,6 +1,7 @@
 import numpy as np
 from ase import Atoms
 import datetime
+from pathlib import Path
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -12,9 +13,11 @@ def flatten(l):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-def read_inputdata(filename: str):
+def read_inputdata(filename: str, copy_data=None):
     """
     Read input.data file and return a list of Atoms objects and the comments
+    If copy_data is a path, it will copy the corresponding inp file to copy_data/OUTCAR_i.inp
+    for all structures with non-zero energy and indices i.
     """
     def read_data_block(lines, begin: int, end: int):
         """
@@ -33,6 +36,15 @@ def read_inputdata(filename: str):
     end = np.array([i for i, x in enumerate(lines) if x == 'end'])
     comments = np.array([x for x in lines if 'comment' in x])
     atoms = [read_data_block(lines, b, e) for b,e in zip(begin, end)]
+    energies = np.array([float(x.split()[1]) for x in lines if 'energy' in x])
+    if copy_data is not None:
+        if not Path(f"{copy_data}").is_dir():
+            Path(f"{copy_data}").mkdir(parents=True)
+        to_copy = np.where(energies != 0)[0]
+        for i in to_copy:
+            with open(f"{copy_data}/OUTCAR_{i}.inp", 'w') as f:
+                for j in range(begin[i], end[i]+1):
+                    f.write(lines[j]+'\n')
     return(atoms, comments)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

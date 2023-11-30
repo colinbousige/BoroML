@@ -89,7 +89,8 @@ Install all necessary libraries with `pip install -r requirements.txt`.
 
 ## Adaptive training scripts
 
-You'll probably need to adapt these scripts to your own cluster and problem...
+You **will** need to adapt these scripts to your own cluster and problem...
+Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where some paths and cluster configuration are hardcoded.
 
 - `adaptive_learning/adaptive_training.py`:
   - Script using the following classes to perform an adaptive training of a NNP and distribute jobs on the fly on a SLURM cluster

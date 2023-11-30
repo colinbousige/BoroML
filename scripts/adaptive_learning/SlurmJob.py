@@ -3,6 +3,17 @@ import re
 import subprocess
 from . import Cluster
 
+# Path to VASP executable
+vaspdir = "/softs/CompChemPackages/VASP6/OpenMpiIntelLib"
+# Path to scratch directory on the cluster
+clusterwdir = "/scratch/$USER/vasp"
+# Where to find the VASP input files: INCAR, POTCAR, KPOINTS
+inputs_VASP = "$HOME/Boro_ML/bin/inputs_VASP"
+# Where to find the adaptive_learning scripts and convert-VASP_OUTCAR_AU.py from n2p2
+mybin = "$HOME/Boro_ML/bin"
+# Base path where n2p2 is installed, as well as the GSL library and OpenMPI
+basepath = "$HOME/bin"
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 class SlurmJob:
@@ -11,7 +22,8 @@ class SlurmJob:
     
     ## Attributes
     `type`: str
-        Type of job, one of 'vasp', 'nnp-train', 'nnp-scaling' or 'nnp-all'. 'nnp-all' will successively scale, train, copy weigths to predict/, and predict on stock structures
+        Type of job, one of 'vasp', 'nnp-train', 'nnp-scaling' or 'nnp-all'. 
+        'nnp-all' will successively scale, train, copy weigths to predict/, and predict on stock structures
     `cluster`: Cluster object
     `path`: str. Default = `'.'`
         Path of the job to write and run.
@@ -78,7 +90,8 @@ class SlurmJob:
         self.path      = path
         """Path of the job to write and run."""
         self.type      = type
-        """Type of job, one of 'vasp', 'nnp-train', 'nnp-scaling' or 'nnp-all'. 'nnp-all' will successively scale, train, copy weigths to `predict/`, and predict on stock structures"""
+        """Type of job, one of 'vasp', 'nnp-train', 'nnp-scaling' or 'nnp-all'. 
+        'nnp-all' will successively scale, train, copy weigths to `predict/`, and predict on stock structures"""
         self.numbers   = numbers
         """For 'vasp'-type jobs, indexes of the POSCAR_xx files to compute."""
         self.jobnumber = ''
@@ -119,20 +132,20 @@ running   = {self.is_running()}"""
     def write_header(self):
         """Write job header of job script"""
         if self.type == "vasp":
-            add = f"""VASPDIR=/softs/CompChemPackages/VASP6/OpenMpiIntelLib
-WDIR=/scratch/$USER/vasp-{self.jobname}
+            add = f"""VASPDIR={vaspdir}
+WDIR={clusterwdir}-{self.jobname}
 source $VASPDIR/env.sh
 
 mkdir -p $WDIR || exit 1
 cd $WDIR
-cp $HOME/Boro_ML/bin/inputs_VASP/INCAR $WDIR
-cp $HOME/Boro_ML/bin/inputs_VASP/POTCAR $WDIR
-cp $HOME/Boro_ML/bin/inputs_VASP/KPOINTS $WDIR
+cp {inputs_VASP}/INCAR $WDIR
+cp {inputs_VASP}/POTCAR $WDIR
+cp {inputs_VASP}/KPOINTS $WDIR
 """
         if "nnp" in self.type:
-            add = f"""export N2P2DIR=$HOME/bin/{self.n2p2dir}
+            add = f"""export N2P2DIR={basepath}/{self.n2p2dir}
 export LD_LIBRARY_PATH=$N2P2DIR/lib:$LD_LIBRARY_PATH
-export PATH=$HOME/Boro_ML/bin:$N2P2DIR/bin:$PATH
+export PATH={mybin}:$N2P2DIR/bin:$PATH
 """
         return(f"""#!/bin/bash
 #SBATCH -J {self.jobname}
@@ -146,8 +159,8 @@ export PATH=$HOME/Boro_ML/bin:$N2P2DIR/bin:$PATH
 #SBATCH -e {self.path}/{self.jobname}.e
 
 export OMP_NUM_THREADS=1
-source $HOME/bin/openmpi401/openmpi4.sh
-source $HOME/bin/gsl/gsl.sh
+source {basepath}/openmpi401/openmpi4.sh
+source {basepath}/gsl/gsl.sh
 MPIBIN=mpirun
 PAT={self.path}
 {add}
@@ -162,7 +175,7 @@ PAT={self.path}
 cp $PAT/POSCAR_{i} $WDIR/POSCAR
 $MPIBIN -np {int(self.nproc/2)} --bind-to core $VASPDIR/vasp_std
 mv $WDIR/OUTCAR $PAT/OUTCAR_{i}
-python $HOME/Boro_ML/bin/convert-VASP_OUTCAR_AU.py $PAT/OUTCAR_{i} $PAT/OUTCAR_{i}.inp
+python {mybin}/convert-VASP_OUTCAR_AU.py $PAT/OUTCAR_{i} $PAT/OUTCAR_{i}.inp
 
 """
         if self.type == "nnp-train":
