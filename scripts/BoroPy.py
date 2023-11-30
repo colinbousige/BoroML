@@ -370,16 +370,12 @@ if metalchoice!='':
 else:
     df = pd.DataFrame({'':['a [Å]', 'b [Å]', 'c [Å]', 'N<sub>total</sub>', 'N<sub>B</sub>', 'Hole density'],
                        'b':[a,b,c, len(struct), len(boron), f"{hd.numerator}/{hd.denominator}"]})
-style = df.style.hide_index()
-style.hide_columns()
-outcol.write(style.to_html(), unsafe_allow_html=True)
+outcol.write(df.style.hide(axis=0).hide(axis=1).to_html(), unsafe_allow_html=True)
 outcol.write("")
 outcol.write("##### Borophene deformation")
 df = pd.DataFrame({'':['x', 'y'],
                    'Borophene deformation': [mx, my]})
-style = df.style.hide_index()
-style.hide_columns()
-outcol.write(style.to_html(), unsafe_allow_html=True)
+outcol.write(df.style.hide(axis=0).hide(axis=1).to_html(), unsafe_allow_html=True)
 
 
 # # # # # # # # # # # # # # # # # # 
