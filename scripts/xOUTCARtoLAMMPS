@@ -1,0 +1,85 @@
+#!/usr/local/bin/python3
+
+"""
+Convert an OUTCAR trajectory file to a lammpstrj file
+"""
+
+from generatorfunctions import *
+import argparse
+from ase.io.vasp import read_vasp_out
+
+boldorange = "\033[93m\033[1m"
+orange = "\033[93m"
+normal = "\033[0m"
+
+
+def main(args):
+    input = args.input
+    output = args.output
+    
+    sys.stderr.write(f"\nReading {input} file... ")
+    sys.stderr.flush()
+    traj = read_vasp_out(input, index = ":")
+    sys.stderr.write(f"Done.\n")
+    sys.stderr.flush()
+    
+    sys.stderr.write(f"Writing {output}.lammpstrj file... ")
+    sys.stderr.flush()
+    with open(f"{output}.lammpstrj", 'w') as f:
+        for image in traj:
+            index = traj.index(image)
+            a,b,c = image.cell.cellpar()[:3]
+            f.write(f"ITEM: TIMESTEP\n")
+            f.write(f"{index}\n")
+            f.write(f"ITEM: NUMBER OF ATOMS\n")
+            f.write(f"{len(image)}\n")
+            f.write(f"ITEM: BOX BOUNDS pp pp pp\n")
+            f.write(f"{0:15.9e} {a:15.9e}\n")
+            f.write(f"{0:15.9e} {b:15.9e}\n")
+            f.write(f"{0:15.9e} {c:15.9e}\n")
+            f.write(f"ITEM: ATOMS id element x y z\n")
+            for i,(at,pos) in enumerate(zip(image.get_chemical_symbols(), image.positions)):
+                x,y,z = pos
+                f.write(f"{i+1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n")
+    sys.stderr.write(f"Done.\n\n")
+    sys.stderr.flush()
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{boldorange}Convert an OUTCAR trajectory file to a lammpstrj file{normal}
+""")
+    parser.add_argument('--input', '-i',
+                        type    = str,
+                        help    = 'Input OUTCAR file.',
+                        default = "OUTCAR")
+    parser.add_argument('--output', '-o',
+                        type    = str,
+                        help    = 'Output .lammpstrj file name without extension.',
+                        default = "traj")
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+
