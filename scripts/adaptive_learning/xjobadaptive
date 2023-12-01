@@ -47,7 +47,7 @@ export PYTHONPATH=\$PYTHONPATH:\$HOME/Boro_ML/bin
 PYTHONBIN=\$HOME/anaconda3/bin/python
 
 PAT=$PAT
-cp \$HOME/Boro_ML/bin/iteration_tools/adaptive_training.py \$PAT
+cp \$HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py \$PAT
 cd \$PAT
 \$PYTHONBIN adaptive_training.py
 
