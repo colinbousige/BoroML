@@ -13,7 +13,6 @@ import argparse
 import sys
 from os.path import isfile
 import numpy as np
-import pandas as pd
 from ase.constraints import FixAtoms
 from ase.io.vasp import read_vasp_out
 from ase.io.vasp import read_vasp
@@ -22,44 +21,40 @@ orange = "\033[93m"
 bold   = "\033[1m"
 normal = "\033[0m"
 
-def flatten(xss):
-    """Flatten a list of lists into a single list."""
-    return np.array([x for xs in xss for x in xs])
-
-
 def write_lammps_traj(structure):
-    index = 0
-    a,b,c = structure.cell.cellpar()[:3]
-    sys.stdout.write(f"ITEM: TIMESTEP\n")
-    sys.stdout.write(f"{index}\n")
-    sys.stdout.write(f"ITEM: NUMBER OF ATOMS\n")
-    sys.stdout.write(f"{len(structure)}\n")
-    sys.stdout.write(f"ITEM: BOX BOUNDS pp pp pp\n")
-    sys.stdout.write(f"{0:15.9e} {a:15.9e}\n")
-    sys.stdout.write(f"{0:15.9e} {b:15.9e}\n")
-    sys.stdout.write(f"{0:15.9e} {c:15.9e}\n")
-    sys.stdout.write(f"ITEM: ATOMS id element x y z\n")
-    for i,(at,pos) in enumerate(zip(structure.get_chemical_symbols(), structure.positions)):
-        x,y,z = pos
-        sys.stdout.write(f"{i+1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n")
+    for it,struc in enumerate(structure):
+        a,b,c = struc.cell.cellpar()[:3]
+        sys.stdout.write(f"ITEM: TIMESTEP\n")
+        sys.stdout.write(f"{it}\n")
+        sys.stdout.write(f"ITEM: NUMBER OF ATOMS\n")
+        sys.stdout.write(f"{len(struc)}\n")
+        sys.stdout.write(f"ITEM: BOX BOUNDS pp pp pp\n")
+        sys.stdout.write(f"{0:15.9e} {a:15.9e}\n")
+        sys.stdout.write(f"{0:15.9e} {b:15.9e}\n")
+        sys.stdout.write(f"{0:15.9e} {c:15.9e}\n")
+        sys.stdout.write(f"ITEM: ATOMS id element x y z\n")
+        for i,(at,pos) in enumerate(zip(struc.get_chemical_symbols(), struc.positions)):
+            x,y,z = pos
+            sys.stdout.write(f"{i+1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n")
 
 
 def write_inputdata(atom, comment):
     """
     From a list of Atoms object and comments, write an input.data file to `filename`.
     """
-    a,b,c = atom.get_cell()/0.529177 #convert to Bohr
-    sys.stdout.write("begin\n")
-    sys.stdout.write(f"comment {comment}\n")
-    sys.stdout.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
-    sys.stdout.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
-    sys.stdout.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
-    for at,pos in zip(atom.get_chemical_symbols(), atom.positions):
-        x,y,z = pos/0.529177 #convert to Bohr
-        sys.stdout.write(f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {0:22.14e} {0:22.14e} {0:22.14e}\n")
-    sys.stdout.write(f"energy {0:22.14e}\n")
-    sys.stdout.write(f"charge 0\n")
-    sys.stdout.write("end\n")
+    for it,(struc,comm) in enumerate(zip(atom,comment)):
+        a,b,c = struc.get_cell()/0.529177 #convert to Bohr
+        sys.stdout.write("begin\n")
+        sys.stdout.write(f"comment {comm}\n")
+        sys.stdout.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
+        sys.stdout.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
+        sys.stdout.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
+        for at,pos in zip(struc.get_chemical_symbols(), struc.positions):
+            x,y,z = pos/0.529177 #convert to Bohr
+            sys.stdout.write(f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {0:22.14e} {0:22.14e} {0:22.14e}\n")
+        sys.stdout.write(f"energy {0:22.14e}\n")
+        sys.stdout.write(f"charge 0\n")
+        sys.stdout.write("end\n")
 
 
 def read_inputdata(filename: str):
@@ -98,19 +93,21 @@ def main(args):
         sys.exit()
     
     if ".lammpstrj" in input:
-        struc = read_lammps_dump(input, index = image)
-        comment = ""
+        atoms = read_lammps_dump(input, index = slice(0, -1))
+        struc = [atoms[im] for im in image]
+        comment = ['']*len(image)
     elif ".data" in input:
         atoms, comments = read_inputdata(input)
-        struc = atoms[image]
-        comment = comments[image]
+        struc = [atoms[im] for im in image]
+        comment = [comments[im] for im in image]
     elif ".inp" in input:
         atoms, comments = read_inputdata(input)
-        struc = atoms[image]
-        comment = comments[image]
+        struc = [atoms[im] for im in image]
+        comment = [comments[im] for im in image]
     elif "OUTCAR" in input:
-        struc = read_vasp_out(input, index = image)
-        comment = ""
+        atoms = read_vasp_out(input, index = slice(0, -1))
+        struc = [atoms[im] for im in image]
+        comment = ['']*len(image)
     elif "POSCAR" in input:
         struc = read_vasp(input)
         comment = ""
@@ -122,17 +119,26 @@ Name must contain either:
 - '.data' or '.inp' for NNP input files
 - '.lammpstrj' for lammps trajectory files
 {out}{normal}""")
-    struc = sort(struc, tags = struc.get_masses())
+    struc = [sort(st, tags = st.get_masses()) for st in struc]
     if rmSub is not None:
-        del struc[[ atom.index for atom in struc if atom.position[2] <= 2.35*(rmSub-1)+1.2 ]]
+        for i,st in enumerate(struc):
+            del st[[ atom.index for atom in st if atom.position[2] <= 2.35*(rmSub-1)+1.2 ]]
+            struc[i] = st
     if fixed is not None:
-        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(fixed-1)+1.2)
-        struc.set_constraint(c)
-        struc = sort(struc, tags = struc.get_masses())
+        for i,st in enumerate(struc):
+            c = FixAtoms(mask=st.positions[:,2] <= 2.35*(fixed-1)+1.2)
+            st.set_constraint(c)
+            st = sort(st, tags = st.get_masses())
+            struc[i] = st
     if out=='vasp':
-        write(sys.stdout, images = struc, format = "vasp", vasp5  = True)
+        write(sys.stdout, images = struc[0], 
+              format = "vasp", vasp5  = True)
+        if len(struc)>1:
+            sys.stderr.write(f"\n{bold}{orange}Warning: Only the first image is written in vasp format.{normal}\n")
     elif out=='lammps':
-        write_lammps(name = None, atoms = struc, comments=comment, atom_style = 'atomic')
+        write_lammps(name = None, atoms = struc[0], comments=comment, atom_style = 'atomic')
+        if len(struc)>1:
+            sys.stderr.write(f"\n{bold}{orange}Warning: Only the first image is written in     lammps format.{normal}\n")
     elif out=='lammpstrj':
         write_lammps_traj(struc)
     elif out=='xyz':
@@ -143,9 +149,9 @@ Name must contain either:
         raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.{normal}\n")
     sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
 
-- N atoms     : {len(struc)}
-- Composition : {struc.symbols}
-- Cell        : {struc.get_cell()[0][0]:.5f} x {struc.get_cell()[1][1]:.5f} x {struc.get_cell()[2][2]:.2f} Å
+- N atoms     : {[len(st) for st in struc]}
+- Composition : {[st.symbols for st in struc]}
+- Cell        : {[st.cell.cellpar()[:3] for st in struc]}
 
 """)
 
@@ -176,8 +182,9 @@ Name must contain either:
                         default = "input.data")
     parser.add_argument('--image', '-i',
                         type    = int,
-                        help    = 'Index of the structure to convert.',
-                        default = -1)
+                        nargs   = "*",
+                        help    = 'Indexes of the structures to convert.',
+                        default = [-1])
     parser.add_argument('--out', '-out',
                         help    = "Output file format. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.",
                         type    = str,
