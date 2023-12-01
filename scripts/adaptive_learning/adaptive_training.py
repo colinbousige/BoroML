@@ -55,10 +55,8 @@ for i in range(1, AT.Niter+1):
     nums = np.unique(np.concatenate([nu[:AT.Nadd] for nu in numbers]).ravel())
     indexes = AT.get_POSCARs(nums)
     AT.do_vasp(indexes)
-    # If some of these are crappy (F>25meV/Å, E>0meV, or not converged),
-    # or duplicated in several combinations, compute the missing ones:
-    to_add = AT.Nadd
     # Structures up to numbers[:to_add] have been added, remove them from stock:
+    to_add = AT.Nadd
     struct_done = np.unique(np.concatenate([nu[:to_add] for nu in numbers]).ravel())
     AT.update_stock(struct_done)
 
