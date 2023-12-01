@@ -1,5 +1,5 @@
 """
-# Iteration Tools
+# Adaptive Learning
 
 List of different functions to be called in an adaptive learning script to build the dataset for an NNP.
 
@@ -10,7 +10,7 @@ List of different functions to be called in an adaptive learning script to build
 
 ## Usage
 
-First, add this folder (`$HOME/Boro_ML/bin/iteration_tools` or wherever you put it) to your `$PATH` and `$PYTHONPATH`.
+First, add this folder (`$HOME/Boro_ML/bin/adaptive_learning` or wherever you put it) to your `$PATH` and `$PYTHONPATH`.
 
 Then, go to your working directory, and make sure the following files are there:
 
@@ -30,7 +30,7 @@ Then just do:
 xjobadaptive node26
 ```
 
-It will copy the python script `$HOME/Boro_ML/bin/iteration_tools/adaptive_training.py` in the current directory, and launch the script on `node26`.
+It will copy the python script `$HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py` in the current directory, and launch the script on `node26`.
 
 ## Note
 
