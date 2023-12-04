@@ -148,14 +148,13 @@ Name must contain either:
         write_inputdata(struc, comment)
     else:
         raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.{normal}\n")
-    printcell = pd.DataFrame({'Natoms':np.array([len(st) for st in struc]),
-                              'Composition':np.array([st.symbols.__str__() for st in struc]),
+    printcell = pd.DataFrame({'Natoms':[len(st) for st in struc],
+                              'Composition':[st.symbols.__str__() for st in struc],
                               'a':[st.cell.cellpar()[0] for st in struc], 
                               'b':[st.cell.cellpar()[1] for st in struc], 
                               'c':[st.cell.cellpar()[2] for st in struc]})
     sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
 
-- Structures : 
 {printcell.__str__()}
 
 """)
