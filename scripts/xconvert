@@ -153,7 +153,7 @@ Name must contain either:
                               'a':[st.cell.cellpar()[0] for st in struc], 
                               'b':[st.cell.cellpar()[1] for st in struc], 
                               'c':[st.cell.cellpar()[2] for st in struc]})
-    sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
+    sys.stderr.write(f"""\n{bold}{orange}Structure parameters:{normal}
 
 {printcell.__str__()}
 

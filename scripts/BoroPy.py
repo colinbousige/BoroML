@@ -389,7 +389,7 @@ def writeout(struct, extension_out):
     # Define name with the wanted parameters
     name = 'Boro' + str(nx) + ',' + str(ny)
     if ','.join(map(str,listholes))!='':
-        name += '_' + ','.join(map(str,listholes))
+        name += '_' + ','.join(map(str,sorted(listholes)))
     if metalchoice!='':
         name += f"-{NZ}{metalchoice}_{surfchoice}"
     # define file extension...
