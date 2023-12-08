@@ -1,11 +1,26 @@
 # Neural network approach for a rapid prediction of metal-supported borophene properties <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
 
-- Author: [Colin BOUSIGE](mailto:colin.bousige@cnrs.fr), CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
-
 This archive contains various files and scripts linked with the article:
-*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, (submitted) (2023).
+*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* (2023)](https://doi.org/10.1021/jacs.3c11549).
 
-# Contents of this archive
+[Please cite this article](#how-to-cite) if you use any of the files in this archive.
+
+- [Neural network approach for a rapid prediction of metal-supported borophene properties <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>](#neural-network-approach-for-a-rapid-prediction-of-metal-supported-borophene-properties-a-hrefhttpszenodoorgbadgelatestdoi698260056img-srchttpszenodoorgbadge698260056svg-altdoi-alignrighta)
+  - [Contents of this archive](#contents-of-this-archive)
+- [Sample LAMMPS input files for launching an MD simulation with the NNP](#sample-lammps-input-files-for-launching-an-md-simulation-with-the-nnp)
+- [The actual NNP potential files to use with N2P2](#the-actual-nnp-potential-files-to-use-with-n2p2)
+- [Various scripts used for post-treating the data or generating structures](#various-scripts-used-for-post-treating-the-data-or-generating-structures)
+  - [Description of the scripts](#description-of-the-scripts)
+    - [Structure generators](#structure-generators)
+    - [Post-treatment scripts](#post-treatment-scripts)
+    - [Adaptive training scripts](#adaptive-training-scripts)
+  - [How to cite](#how-to-cite)
+  - [Author](#author)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
+
+
+## Contents of this archive
 
 ```bash
 .
@@ -46,11 +61,11 @@ This archive contains various files and scripts linked with the article:
     └── xreadLAMMPSlog
 ```
 
-# Description of the scripts
+## Description of the scripts
 
 Install all necessary libraries with `pip install -r requirements.txt`.
 
-## Structure generators
+### Structure generators
 
 - `BoroPy.py`:
   - Streamlit GUI tool to build and visualize borophene structures
@@ -62,7 +77,7 @@ Install all necessary libraries with `pip install -r requirements.txt`.
   - Generate a borophene structure to stdout
   - Usage: `python xgenerate-structure -h` to get the help
 
-## Post-treatment scripts
+### Post-treatment scripts
 
 - `gofr.c`:
   - C code to compute the radial distribution function from a LAMMPS dump file.
@@ -87,7 +102,7 @@ Install all necessary libraries with `pip install -r requirements.txt`.
   - Read a LAMMPS log file and extract the thermodynamic properties, prints to stdout
   - Usage: `python xreadLAMMPSlog -h` to get the help
 
-## Adaptive training scripts
+### Adaptive training scripts
 
 You **will** need to adapt these scripts to your own cluster and problem...
 Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where some paths and cluster configuration are hardcoded.
@@ -104,3 +119,32 @@ Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where 
   - Some user-defined functions
 - `adaptive_learning/xjobadaptive`:
   - Launch an adaptive training of a NNP on a SLURM cluster. **You need to edit the script to set the correct paths and cluster definition for you**.
+
+## How to cite
+
+```bibtex
+@article{Mignon2023,
+  title = {Neural Network Approach for a Rapid Prediction of Metal-Supported Borophene Properties},
+  author = {Pierre Mignon and Abdul-Rahman Allouche and Neil Richard Innis and Colin Bousige},
+  journal = {Journal of the American Chemical Society},
+  year = {2023},
+  doi = {10.1021/jacs.3c11549},
+  volume = {},
+  number = {},
+  pages = {}
+}
+```
+
+## Author
+
+[Colin BOUSIGE](mailto:colin.bousige@cnrs.fr), CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
+
+## License
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+
+## Acknowledgments
+
+This work was supported by the French National Research Agency grant ANR-21-CE09-0001-01.

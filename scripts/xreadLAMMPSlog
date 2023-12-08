@@ -34,6 +34,8 @@ def main(args):
         for i in range(begin[run]+2, end[run]):
             if "#" not in lines[i]:
                 toprint = lines[i].split()
+                if 'ERROR' in toprint:
+                    toprint=['NaN']*len(header)
                 sys.stdout.write(f"{run+1},{ts[run]},{','.join(toprint)}\n")
 
 
