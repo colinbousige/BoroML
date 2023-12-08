@@ -5,20 +5,21 @@ This archive contains various files and scripts linked with the article:
 
 [Please cite this article](#how-to-cite) if you use any of the files in this archive.
 
-- [Neural network approach for a rapid prediction of metal-supported borophene properties <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>](#neural-network-approach-for-a-rapid-prediction-of-metal-supported-borophene-properties-a-hrefhttpszenodoorgbadgelatestdoi698260056img-srchttpszenodoorgbadge698260056svg-altdoi-alignrighta)
-  - [Contents of this archive](#contents-of-this-archive)
-- [Sample LAMMPS input files for launching an MD simulation with the NNP](#sample-lammps-input-files-for-launching-an-md-simulation-with-the-nnp)
-- [The actual NNP potential files to use with N2P2](#the-actual-nnp-potential-files-to-use-with-n2p2)
-- [Various scripts used for post-treating the data or generating structures](#various-scripts-used-for-post-treating-the-data-or-generating-structures)
-  - [Description of the scripts](#description-of-the-scripts)
-    - [Structure generators](#structure-generators)
-    - [Post-treatment scripts](#post-treatment-scripts)
-    - [Adaptive training scripts](#adaptive-training-scripts)
-  - [How to cite](#how-to-cite)
-  - [Author](#author)
-  - [License](#license)
-  - [Acknowledgments](#acknowledgments)
+----
 
+#### Table of contents
+
+- [Contents of this archive](#contents-of-this-archive)
+- [Description of the scripts](#description-of-the-scripts)
+  - [Structure generators](#structure-generators)
+  - [Post-treatment scripts](#post-treatment-scripts)
+  - [Adaptive training scripts](#adaptive-training-scripts)
+- [How to cite](#how-to-cite)
+- [Author](#author)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+----
 
 ## Contents of this archive
 
