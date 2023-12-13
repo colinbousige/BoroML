@@ -5,14 +5,6 @@ from pathlib import Path
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-def flatten(l):
-    """
-    Flatten nested list
-    """
-    return [item for sublist in l for item in sublist]
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
 def read_inputdata(filename: str, copy_data=None):
     """
     Read input.data file and return a list of Atoms objects and the comments

@@ -16,10 +16,6 @@ boldorange = "\033[93m\033[1m"
 orange = "\033[93m"
 normal = "\033[0m"
 
-def flatten(xss):
-    """Flatten a list of lists into a single list."""
-    return np.array([x for xs in xss for x in xs])
-
 
 def write_nnp(fname, atoms, comment):
     """Write a list of Atom structures in NNP input format"""
@@ -54,7 +50,7 @@ def main(args):
         os.system(f"rm -f {destination}/EW.data")
     
     base_path = os.getcwd() # Get the current working directory
-    traj_files = flatten([glob.glob(f"{base_path}/{folder}/*/*{pattern}*.lammpstrj") for folder in folders])
+    traj_files = np.array([glob.glob(f"{base_path}/{folder}/*/*{pattern}*.lammpstrj") for folder in folders]).flatten()
     os.makedirs(destination, exist_ok=True)
     counter = 0
     counterew = 0
@@ -91,7 +87,7 @@ Working directory: {base_path}/
                         # Compress/dilate the cell
                         ew[i].set_cell([a*x,b*x,c*x], scale_atoms=True)
                         # Compute all pairwise distances
-                        dd = flatten([ew[i].get_distances(j,range(len(ew[i])), mic=True) for j in range(len(ew[i]))])
+                        dd = np.array([ew[i].get_distances(j,range(len(ew[i])), mic=True) for j in range(len(ew[i]))]).flatten()
                         min_d = min(dd[dd>0])
                         # Keep the structure only if distances are not too short
                         if min_d > Rmin:
@@ -114,7 +110,7 @@ Working directory: {base_path}/
                     # Compress/dilate the cell
                     atoms[i].set_cell([a*x,b*x,c*x], scale_atoms=True)
                     # Compute all pairwise distances
-                    dd = flatten([atoms[i].get_distances(j,range(len(atoms[i])), mic=True) for j in range(len(atoms[i]))])
+                    dd = np.array([atoms[i].get_distances(j,range(len(atoms[i])), mic=True) for j in range(len(atoms[i]))]).flatten()
                     min_d = min(dd[dd>0])
                     # Keep the structure only if distances are not too short
                     if min_d > Rmin:

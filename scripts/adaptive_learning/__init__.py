@@ -56,8 +56,6 @@ In case you have already computed some structures with DFT, you can still includ
     From a list of Atoms object and comments, write an `input.data` file to `filename`.
 - `print_success_message()`
     - Print a geeky success message.
-- `flatten(l)`
-    - Flatten nested list
 
 """
 

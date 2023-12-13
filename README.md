@@ -3,7 +3,7 @@
 This archive contains various files and scripts linked with the article:
 *"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* (2023)](https://doi.org/10.1021/jacs.3c11549).
 
-[Please cite this article](#how-to-cite) if you use any of the files in this archive.
+Please [cite this article](#how-to-cite) if you use any of the files in this archive.
 
 ----
 
@@ -122,6 +122,8 @@ Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where 
   - Launch an adaptive training of a NNP on a SLURM cluster. **You need to edit the script to set the correct paths and cluster definition for you**.
 
 ## How to cite
+
+*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* (2023)](https://doi.org/10.1021/jacs.3c11549).
 
 ```bibtex
 @article{Mignon2023,
