@@ -320,15 +320,9 @@ def LAMMPS_to_POSCAR(
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def flatten(t):
-    """Flattens a list of lists"""
-    return [item for sublist in t for item in sublist]
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # #
-
 def mindist(atoms):
     """Gets minimum distance between atoms in a Atom object"""
-    dists = np.array(flatten(atoms.get_all_distances()))
+    dists = np.array(atoms.get_all_distances()).flatten()
     dists = dists[ dists > 0 ]
     return(min(dists))
 
