@@ -7,16 +7,12 @@ import numpy as np
 import itertools
 from ase import *
 from ase.io import write
-from ase.visualize import view
 from ase.constraints import FixAtoms
 import matplotlib.pyplot as plt
 from scipy.spatial import distance
-import os.path
-import os
 import pandas as pd
 from io import StringIO 
 import sys
-from pathlib import Path, PurePath
 import py3Dmol
 from stmol import showmol
 
@@ -29,26 +25,6 @@ class Capturing(list):
         self.extend(self._stringio.getvalue().splitlines())
         del self._stringio    # free up some memory
         sys.stdout = self._stdout
-
-def write_pdb(struct, name=""):
-    a, b, c, alpha, beta, gamma = struct.cell.cellpar() 
-    out  = "TITLE       " + name + "\n"
-    out += "CRYST1{:9.3f}{:9.3f}{:9.3f}{:7.2f}{:7.2f}{:7.2f} P 1           1\n".format(a,b,c,alpha,beta,gamma)
-    boron = struct[struct.get_atomic_numbers() == 5]
-    metal = struct[struct.get_atomic_numbers() != 5]
-    for i, (at, x, y, z) in enumerate(zip(
-        boron.get_chemical_symbols(), boron.positions[:,0], boron.positions[:,1], boron.positions[:,2])):
-        out += "ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1,at,x,y,z,at)
-    for i, (at, x, y, z) in enumerate(zip(
-        metal.get_chemical_symbols(), metal.positions[:,0], metal.positions[:,1], metal.positions[:,2])):
-        out += "ATOM  {:5d}  {:<4s}             {:8.3f}{:8.3f}{:8.3f}  1.00  1.00           {:s}\n".format(i+1+len(boron),at,x,y,z,at)
-    pairs = np.array(list(itertools.combinations(range(len(boron)),2)))
-    dr = distance.pdist(boron.positions)
-    connected = pairs[dr<1.9]
-    for i, j in connected:
-        out +=  "CONECT{:5d}{:5d}\n".format(i+1,j+1)
-        out += "ENDMDL\n"
-    return out
 
 
 dico_predef = {'\u03b1'  :(3,3,[0,10]), #alpha
@@ -356,7 +332,9 @@ with tab2:
     with t2l:
         showmol(xyzview, width=width3d, height=height3d)
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Show table with info
+# # # # # # # # # # # # # # # # # # # # # # # # # # 
 a = str(np.round(struct.cell[0,0],4))
 b = str(np.round(struct.cell[1,1],4))
 c = str(np.round(struct.cell[2,2],4))
