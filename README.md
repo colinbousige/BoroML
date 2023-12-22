@@ -1,7 +1,7 @@
 # Neural network approach for a rapid prediction of metal-supported borophene properties <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
 
 This archive contains various files and scripts linked with the article:
-*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* (2023)](https://doi.org/10.1021/jacs.3c11549).
+*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* **145**, 27857-27866 (2023)](https://doi.org/10.1021/jacs.3c11549).
 
 Please [cite this article](#how-to-cite) if you use any of the files in this archive.
 
@@ -132,9 +132,9 @@ Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where 
   journal = {Journal of the American Chemical Society},
   year = {2023},
   doi = {10.1021/jacs.3c11549},
-  volume = {},
-  number = {},
-  pages = {}
+  volume = {145},
+  number = {50},
+  pages = {27857-27866}
 }
 ```
 

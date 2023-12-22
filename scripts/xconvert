@@ -11,6 +11,7 @@ Name must contain either:
 from generatorfunctions import *
 import argparse
 import sys
+import os
 from os.path import isfile
 import numpy as np
 import pandas as pd
@@ -89,26 +90,33 @@ def main(args):
     fixed = args.fixed
     rmSub = args.rmSub
 
+    if not 'all' in image:
+        image = [int(im) for im in image]
+
     if not isfile(input):
         sys.stderr.write(f"\n{bold}{orange}{input} file does not exist!{normal}\n\n")
         sys.exit()
     sys.stderr.write(f'Reading {input}... '); sys.stderr.flush()
     if ".lammpstrj" in input:
-        atoms = read_lammps_dump(input, index = slice(0, -1))
-        struc = [atoms[im] for im in image]
-        comment = [f'{input} - image {im}' for im in image]
+        struc = read_lammps_dump(input, index = slice(0, -1))
+        if not 'all' in image:
+            struc = [struc[im] for im in image]
+            comment = [f'{input} - image {im}' for im in image]
     elif ".data" in input:
-        atoms, comments = read_inputdata(input)
-        struc = [atoms[im] for im in image]
-        comment = [comments[im] for im in image]
+        struc, comments = read_inputdata(input)
+        if not 'all' in image:
+            struc = [struc[im] for im in image]
+            comment = [comments[im] for im in image]
     elif ".inp" in input:
-        atoms, comments = read_inputdata(input)
-        struc = [atoms[im] for im in image]
-        comment = [comments[im] for im in image]
+        struc, comments = read_inputdata(input)
+        if not 'all' in image:
+            struc = [struc[im] for im in image]
+            comment = [comments[im] for im in image]
     elif "OUTCAR" in input:
-        atoms = read_vasp_out(input, index = slice(0, -1))
-        struc = [atoms[im] for im in image]
-        comment = [f'{input} - image {im}' for im in image]
+        struc = read_vasp_out(input, index = slice(0, -1))
+        if not 'all' in image:
+            struc = [struc[im] for im in image]
+            comment = [f'{input} - image {im}' for im in image]
     elif "POSCAR" in input:
         struc = read_vasp(input)
         comment = ""
@@ -133,13 +141,22 @@ Name must contain either:
             st = sort(st, tags = st.get_masses())
             struc[i] = st
     if out=='vasp':
-        write(sys.stdout, images = struc[0], format = "vasp", vasp5  = True)
+        if len(struc)==1:
+            write(sys.stdout, images = struc[0], format = "vasp", vasp5  = True)
         if len(struc)>1:
-            sys.stderr.write(f"\n{bold}{orange}Warning: Only the first image is written in vasp format.{normal}\n")
+            os.makedirs('POSCARs', exist_ok=True)
+            for i,st in enumerate(struc):
+                write(f"POSCARs/POSCAR_{i:06d}", images = st, 
+                      format = "vasp", vasp5  = True)
     elif out=='lammps':
-        write_lammps(name = None, atoms = struc[0], comments=comment[0], atom_style = 'atomic')
+        if len(struc)==1:
+            write_lammps(name = None, atoms = struc[0], 
+                         comments=comment[0], atom_style = 'atomic')
         if len(struc)>1:
-            sys.stderr.write(f"\n{bold}{orange}Warning: Only the first image is written in     lammps format.{normal}\n")
+            os.makedirs('LAMMPS', exist_ok=True)
+            for i,st in enumerate(struc):
+                write_lammps(name = f"LAMMPS/structure_{i:06d}.data", 
+                             atoms = st, comments=comment[0], atom_style = 'atomic')
     elif out=='lammpstrj':
         write_lammps_traj(struc)
     elif out=='xyz':
@@ -185,9 +202,8 @@ Name must contain either:
                         help    = 'Input file name.',
                         default = "input.data")
     parser.add_argument('--image', '-i',
-                        type    = int,
                         nargs   = "*",
-                        help    = 'Indexes of the structures to convert.',
+                        help    = 'Indexes of the structures to convert. Use "all" to convert the whole trajectory.',
                         default = [-1])
     parser.add_argument('--out', '-out',
                         help    = "Output file format. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.",
