@@ -50,7 +50,17 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'beta10':(1,4,[0]),    #beta10
           'beta11':(12,8,[0,4,19,28,43,53,68,77,92,102,117,126,141,151,166,175,190,24,23,47,49,64,73,88,98,113,122,137,147,162,171,186]),      #beta11
           'beta12':(1,3,[0]),    #beta12
-          'beta13':(2,3,[0,4])   #beta13
+          'beta13':(2,3,[0,4]),  #beta13
+          'island1':(3,6,[0,4,5,30,31,32,35,24,11,6,23,29,28,21,10,17,22,14,26,2,7,20,1,12]),
+          'island2':(3,6,[0,4,5,30,31,32,35,24,11,6,23,29,21,10,17,22,14,26,2,7,20,1,12,33,27,28]),
+          'island3':(3,6,[0,4,5,30,31,32,33,34,35,24,11,6,23,29,28,18,9,21,10,17,22,14,26,2]),
+          'island4':(3,6,[0,1,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,25,18,16,9,21,10,17,22]),
+          'island5':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18,16,9,21,10,17,22]),
+          'island6':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18,15]),
+          'island7':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18]),
+          'island8':(3,6,[0,1,2,3,4,5,11,35,21,7,13,6,18,12,24,25,31,30]),
+          'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
+          'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
@@ -199,27 +209,33 @@ undump      dmp{jobname}
     if minimize:
         mini = f"""
 #-−-−−---−---−−−− Cell optimization −−−−−−−−-------
-thermo        10
-dump minidmp  all custom 10 ${{dumpname}}_mini.lammpstrj id element x y z{" c_pe" if outPE else ""}
-dump_modify   minidmp flush yes sort id element B {substrate}
-fix           freeze fixedlayer setforce 0.0 0.0 0.0
-minimize      0 ${{ftol}} 1000 10000
-unfix         freeze
-undunmp       minidmp
-thermo        ${{thermoprint}}
+thermo         10
+dump minidmp   all custom 10 ${{dumpname}}_mini.lammpstrj id element x y z{" c_pe" if outPE else ""}
+dump_modify    minidmp flush yes sort id element B {substrate}
+fix            freeze fixedlayer setforce 0.0 0.0 0.0
+minimize       0 ${{ftol}} 1000 10000
+unfix          freeze
+undump         minidmp
+thermo         ${{thermoprint}}
+reset_timestep 0
 """
         miniheader=f"""
 # Minimization tolerance on Forces
 variable ftol        equal {ftol}"""
 
     f = open(outputfile, "w")
+    writeT2=""
+    if T2 is not None:
+        writeT2=f"""
+# Very final temperature (K)
+variable T2          equal {T2}"""
     f.write(f"""#−−−−−−−−−−−−−−−−−−− Parameters −−−−−−−−−−−−−−−−−−−
 # Input structure file
 variable inputfile   string {inputfile}
 # Initial temperature (K)
 variable T0          equal {T0}
 # Final temperature (K)
-variable T1          equal {T1}
+variable T1          equal {T1}{writeT2}
 # Pressure (atm)
 variable P           equal {P}
 # Dump every dumptime
@@ -388,8 +404,6 @@ def create_structure(
     vdwdist=2.45,
     vac=25,
     angle=0,
-    NX=10,
-    NY=10,
     NZ=4,
     random=0,
     v=1,
@@ -429,12 +443,6 @@ def create_structure(
         Force z dimension of the structure. If 0, fall back to periodic cell in z.
     angle      : float
         Rotation of the borophene structure (in degrees)
-    NX : int
-        Number of cell repetition of the substrate cell in X. 
-        Useful only if angle != 0
-    NY : int
-        Number of cell repetition of the substrate cell in Y. 
-        Useful only if angle != 0
     NZ : int
         Number of layers of the substrate
     random : float

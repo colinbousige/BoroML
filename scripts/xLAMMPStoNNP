@@ -97,7 +97,7 @@ Working directory: {base_path}/
                             write_nnp(f"{destination}/EW.data", ew[i], comment)
         counter += N - New
         EWtext = '' if New==0 else f"({boldorange}{New} EW{normal})"
-        sys.stderr.write(f"{'/'.join(pathlib.Path(traj).parts[-3:]):40s} => {N:6d} structures {EWtext}\n")
+        sys.stderr.write(f"{'/'.join(pathlib.Path(traj).parts[-3:-1]):50s} => {N:6d} structures {EWtext}\n")
         sys.stderr.flush()
         for i in range(len(atoms)):
             countertot += 1
@@ -123,7 +123,7 @@ Working directory: {base_path}/
                                           {boldorange}TOTAL => {counter:6d} structures{normal}
                                        {boldorange}TOTAL EW => {counterew:6d} structures{normal}""")
     if len(coef)>0:
-        sys.stderr.write(f"                    {boldorange}With dilatation/compression => {countertot:6d} structures{normal}\n")
+        sys.stderr.write(f"\n                    {boldorange}With dilatation/compression => {countertot:6d} structures{normal}\n")
         for k,delta in enumerate(coef):
             sys.stderr.write(f"Delta = {delta}% => {countdil[k]} structures ({countdilew[k]} EW)\n")
     sys.stderr.write(f"""

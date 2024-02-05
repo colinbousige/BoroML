@@ -76,7 +76,7 @@ class SlurmJob:
     """
     
     def __init__(self, type: str, cluster: Cluster, path='.', Nepoch=30,
-                 jobname='job', numbers=[], launch=False, maxtries=20):
+                 jobname='job', numbers=[], launch=False, maxtries=20, wait=3):
         if not type in ['vasp', 'nnp-train', 'nnp-scaling', 'nnp-all']:
             raise TypeError("type must be one of 'vasp', 'nnp-train', 'nnp-scaling', or 'nnp-all'.")
         self.node      = ''
@@ -106,6 +106,8 @@ class SlurmJob:
         """Cluster object"""
         self.Nepoch    = Nepoch
         """Numbers of epochs in the training part"""
+        self.wait      = wait
+        """Time to wait between submission tries"""
         if launch:
             """Launch the job upon creation or not?"""
             self.assign_node()
@@ -244,7 +246,7 @@ $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
                 continue
             self.jobnumber = jobnumber[0]
             print(f"├─ Launched {self.jobname} with ID {self.jobnumber} on {self.node} with {self.nproc} cores...", flush=True, end="")
-            time.sleep(3)
+            time.sleep(self.wait)
             msg = subprocess.run(f"squeue -u $USER", shell=True, 
                 capture_output=True).stdout.decode('utf-8')
             if self.jobnumber in msg:
