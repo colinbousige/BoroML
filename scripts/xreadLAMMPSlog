@@ -26,6 +26,9 @@ def main(args):
     begin = [i for i,b in enumerate(lines) if "Per MPI rank memory allocation" in b]
     ts = [b.split(": ")[1].strip() for i,b in enumerate(lines) if "  Time step     :" in b]
     end = [i for i,e in enumerate(lines) if "Loop time" in e]
+    for l in lines:
+        if "Setting up cg style minimization" in l:
+            ts = [0]+ts
     if len(begin)>len(end):#in case the run has not finished yet, i.e. when reading `lammps.out`
         end.append(len(lines))
     header = lines[begin[0]+1].split()

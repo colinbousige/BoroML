@@ -7,7 +7,7 @@ lynxvasp = Cluster(preferred_node = 'l-node04',
                    forbid_nodes   = ['node31'],
                    forbid_queues  = ['tc1', 'tc5'])
 lynxnnp  = Cluster(preferred_node = 'l-node04',
-                   forbid_nodes   = ['node31', 'node33'],
+                   forbid_nodes   = ['node31'],
                    forbid_queues  = ['tc1', 'tc5'])
 # Initialize an AdaptiveTraining object:
 AT = AdaptiveTraining(Nadd        = 50, 
@@ -16,7 +16,7 @@ AT = AdaptiveTraining(Nadd        = 50,
                       Nepoch      = 7,
                       clusterNNP  = lynxnnp,
                       clusterVASP = lynxvasp,
-                      vasp_Nnodes = 4)
+                      vasp_Nnodes = 5)
 # /!\ Set to restart=True if restarting after stopping job, 
 # /!\ otherwise it will restart from scratch!
 

@@ -47,17 +47,22 @@ class AdaptiveTraining:
         Compute with VASP all structures in `EW.data` and add them to the dataset. This `EW.data` file is created with the script `xLAMMPStoNNP`.
     `compare_energies(self)`
         Compare energies computed by NNP1 and NNP2.
-    `copy_weights(self, best1:int, best2:int)`
+    `copy_weights(self)`
         Copy weight files from training to predict folder, as well as scaling.data and input.nn
     `do_NNPs(self)`
         Perform the, scaling, training and prediction of both NNPs and wait until it's done. The saved weights are the ones of the last epoch.
     `do_predict(self)`
         Compute energies of all remaining stock structures with both NNPs and wait until it's done
-    `do_scaling(self)`
+    `do_scaling(self, wait=.2)`
         Perform the scaling of both NNPs and wait until it's done
     `do_training(self)`
-    `do_vasp(self, indexes, Nnodes=4)`
         Perform the training of both NNPs and wait until it's done
+    `check_training(self)`
+        Check that the jobs actually worked, and redo them if not
+    `check_predict(self)`
+        Check that the jobs actually worked, and redo them if not
+    `do_vasp(self, indexes, Nnodes=4)`
+        Perform the vasp calculations on the structures with indexes `indexes` and wait until it's done
     `get_best(self)`
         Get best epoch and RMSE from a training `learning-curve.out` file in `self.path`
     `get_epochs(self)`
@@ -123,7 +128,7 @@ class AdaptiveTraining:
                 for line in fileinput.input(f"{self.path}/NNP{i}/train/input.nn", inplace = 1): 
                     print(line.replace("epochs ", f"epochs {self.Nepoch} #"), end='')
                 for line in fileinput.input(f"{self.path}/NNP{i}/train/input.nn", inplace = 1): 
-                    print(line.replace("write_weights_epoch ", f"write_weights_epoch {self.Nepoch} #"), end='')
+                    print(line.replace("write_weights_epoch ", f"write_weights_epoch 1 #"), end='')
         self.Nstock  = self.get_Nstruct(stock = True)
         """Number of structures in stock initially."""
         self.Niter   = int(self.Nstock / self.Nadd)
@@ -165,6 +170,10 @@ class AdaptiveTraining:
             Path(f"{self.path}/inputs").mkdir(parents=True, exist_ok=True)
             Path(f"{self.path}/plots").mkdir(parents=True, exist_ok=True)
             Path(f"{self.path}/vasp").mkdir(parents=True, exist_ok=True)
+            Path(f"{self.path}/MDtests").mkdir(parents=True, exist_ok=True)
+            Path(f"{self.path}/finaltraining").mkdir(parents=True, exist_ok=True)
+            subprocess.run(f"cp {self.path}/input1.nn {self.path}/finaltraining/input.nn", shell=True)
+            subprocess.run(f"cp /home/cbousige/Boro_ML/bin/xtrain {self.path}/finaltraining/", shell=True)
             if self.restart == False:
                 for i in range(1, self.Nnnp+1):
                     Path(f"{self.path}/NNP{i}/predict").mkdir(parents=True, exist_ok=True)
@@ -251,13 +260,13 @@ class AdaptiveTraining:
         """
         best = []
         rmse = []
-        print(f"", flush=True)
+        # print(f"", flush=True)
         for i in range(1, self.Nnnp+1):
             data = pd.read_table(f'{self.path}/NNP{i}/train/learning-curve.out', comment='#', sep=r'\s{2,}', 
                             engine='python', usecols=[0,1], names=['epoch','RMSE'], header=None)
             best += [data.RMSE.argmin()]
             rmse += [data.RMSE.min()*1000*27.21138469]
-            print(f"""NNP{i}/train: BestEpoch = {best[i-1]} – RMSE = {rmse[i-1]:.3f}""", flush=True)
+            # print(f"""NNP{i}/train: BestEpoch = {best[i-1]} – RMSE = {rmse[i-1]:.3f}""", flush=True)
         print(f"", flush=True)
         return(best, rmse)
     
@@ -276,20 +285,51 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def copy_weights(self, epoch):
+    def copy_weights(self):
         """
-        Copy weight files of epochs `[epoch]` from training to predict folder, as well as `scaling.data` and `input.nn`
+        Copy weight files of epochs `[Nepoch]` from training to predict folder, as well as `scaling.data` and `input.nn`
         """
-        print(f"├─ Copying weights from epochs {epoch}...\n│", flush=True)
+        BestRmse = []
+        for i in range(1, self.Nnnp+1):
+            data = pd.read_table(f'{self.path}/NNP{i}/train/learning-curve.out', comment='#', sep=r'\s{2,}', 
+                            engine='python', usecols=[0,1], names=['epoch','RMSE'], header=None)
+            # locate the epoch with minimum RMSE
+            BestRmse += [data.RMSE.argmin()]
+        print(f"├─ Copying weights from epochs {BestRmse}...\n│", flush=True)
         for i in range(1, self.Nnnp+1):
             nnppath=f'{self.path}/NNP{i}'
-            subprocess.run(f'cp {nnppath}/train/weights.047.{epoch[i-1]:06d}.out {nnppath}/train/weights.047.data', shell=True)
-            subprocess.run(f'cp {nnppath}/train/weights.005.{epoch[i-1]:06d}.out {nnppath}/train/weights.005.data', shell=True)
+            subprocess.run(f'cp {nnppath}/train/weights.047.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.047.data', shell=True)
+            subprocess.run(f'cp {nnppath}/train/weights.005.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.005.data', shell=True)
             subprocess.run(f'cp {nnppath}/train/weights.005.data {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/weights.047.data {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/input.nn {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/scaling.data {nnppath}/predict/', shell=True)
             # subprocess.run(f'mv {nnppath}/train/input.nn.bak {nnppath}/train/input.nn', shell=True)
+    
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def reset_train(self):
+        """
+        Remove old files to allow checking the new jobs actually ran
+        """
+        for i in range(1, self.Nnnp+1):
+            nnppath=f'{self.path}/NNP{i}'
+            subprocess.run(f'rm -f {nnppath}/train/*.out', shell=True)
+            subprocess.run(f'rm -f {nnppath}/train/function.data', shell=True)
+            subprocess.run(f'rm -f {nnppath}/train/scaling.data', shell=True)
+            subprocess.run(f'rm -f {nnppath}/train/nnp-*log*', shell=True)
+            subprocess.run(f'rm -f {nnppath}/train/evsv.dat', shell=True)
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def reset_predict(self):
+        """
+        Remove old files to allow checking the new jobs actually ran
+        """
+        for i in range(1, self.Nnnp+1):
+            nnppath=f'{self.path}/NNP{i}'
+            subprocess.run(f'rm -f {nnppath}/predict/*.out', shell=True)
+
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -328,9 +368,10 @@ class AdaptiveTraining:
         ax1.set_xlabel('Dataset Size')
         ax1.set_ylabel('$|\Delta E|$ [meV/at]')
         ax1.grid()
-        ax1.set_ylim([0, 5*min(data['dEmean1-2'])])
+        ax1.set_ylim([0, max(data['dEmean1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            ax1.errorbar(data.N, data[f'dEmean{i}-{j}'], yerr=data[f'dEstd{i}-{j}'], label=f'$NNP{i}-NNP{j}$')
+            ax1.plot(data.N, data[f'dEmean{i}-{j}'], 
+                     label=f'$NNP{i}-NNP{j}$')
 
         ax2.set_title("$std(\Delta E)$", fontweight="bold")
         ax2.set_xlabel('Dataset Size')
@@ -338,7 +379,8 @@ class AdaptiveTraining:
         ax2.grid()
         ax2.set_ylim([0, 5*min(data['dEstd1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            ax2.plot(data.N, data[f'dEstd{i}-{j}'], label=f'$NNP{i}-NNP{j}$')
+            ax2.plot(data.N, data[f'dEstd{i}-{j}'], 
+                     label=f'$NNP{i}-NNP{j}$')
 
         Line, Label = ax1.get_legend_handles_labels()
         Tot = self.Ncomb
@@ -498,10 +540,11 @@ class AdaptiveTraining:
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
-    def do_scaling(self):
+    def do_scaling(self, wait=3):
         """
-        Perform the scaling of both NNPs and wait until it's done
+        Perform the scaling of all NNPs and wait until it's done
         """
+        self.reset_train()
         scale = []
         for i in range(1, self.Nnnp+1):
             scale += [SlurmJob(
@@ -509,14 +552,47 @@ class AdaptiveTraining:
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
                     jobname = f"scale{i}", 
-                    launch  = True)]
+                    launch  = True,
+                    wait    = wait)]
         while any([s.is_running() for s in scale]) == True:
-            time.sleep(10)
+            time.sleep(2)
         print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
-    
+        self.check_scaling(wait)
+        self.reset_predict()
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def check_scaling(self, wait=3):
+        """
+        Check that the jobs actually worked, and redo them if not
+        """
+        todo = []
+        for i in range(1, self.Nnnp+1):
+            nnppath=f'{self.path}/NNP{i}'
+            if not Path(f"{nnppath}/train/scaling.data").is_file():
+                todo += [i]
+        if len(todo)>0:
+            print(f"├─▶︎ Scaling of NNPs[{todo}] failed, relaunching them...\n│",flush=True)
+            scale = []
+            for i in todo:
+                scale += [SlurmJob(
+                    type    = 'nnp-scaling', 
+                    path    = f"{self.path}/NNP{i}/train", 
+                    cluster = self.clusterNNP,
+                    jobname = f"scale{i}", 
+                    launch  = True,
+                    wait    = wait)]
+            while any([s.is_running() for s in scale]) == True:
+                time.sleep(1)
+            print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
+            self.check_scaling(wait)
+        else:
+            print(f"├─▶︎ Scaling of all NNPs successful.\n│",flush=True)
+            return(True)
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
-    def do_training(self):
+    def do_training(self, wait=3):
         """
         Perform the training of both NNPs and wait until it's done
         """
@@ -527,12 +603,43 @@ class AdaptiveTraining:
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
                     jobname = f"train{i}", 
-                    launch  = True)]
+                    launch  = True,
+                    wait    = wait)]
         while any([t.is_running() for t in train]) == True:
-            time.sleep(10)
+            time.sleep(2)
         print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
+        self.check_training()
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def check_training(self):
+        """
+        Check that the jobs actually worked, and redo them if not
+        """
+        todo = []
+        for i in range(1, self.Nnnp+1):
+            nnppath=f'{self.path}/NNP{i}'
+            if not Path(f"{nnppath}/train/learning-curve.out").is_file():
+                todo += [i]
+        if len(todo)>0:
+            print(f"├─▶︎ Training of NNPs[{todo}] failed, relaunching them...\n│",flush=True)
+            train = []
+            for i in todo:
+                train += [SlurmJob(
+                        type    = 'nnp-train', 
+                        path    = f"{self.path}/NNP{i}/train", 
+                        cluster = self.clusterNNP,
+                        jobname = f"train{i}", 
+                        launch  = True)]
+            while any([t.is_running() for t in train]) == True:
+                time.sleep(10)
+            print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
+            self.check_training()
+        else:
+            print(f"├─▶︎ Training of all NNPs successful.\n│",flush=True)
+            return(True)
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
     def do_NNPs(self):
         """
@@ -553,11 +660,11 @@ class AdaptiveTraining:
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
-    def do_predict(self):
+    def do_predict(self, wait=3):
         """
         Compute energies of all remaining stock structures with both NNPs and wait until it's done
         """
-        self.copy_weights([self.Nepoch]*self.Nnnp)
+        self.copy_weights()
         self.inputnn2predict()
         predict = []
         for i in range(1, self.Nnnp+1):
@@ -566,11 +673,42 @@ class AdaptiveTraining:
                     path    = f"{self.path}/NNP{i}/predict", 
                     cluster = self.clusterNNP,
                     jobname = f"predict{i}", 
-                    launch  = True)]
+                    launch  = True,
+                    wait    = wait)]
         while any([p.is_running() for p in predict]) == True:
-            time.sleep(10)
+            time.sleep(2)
         print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
-    
+        self.check_predict()
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def check_predict(self):
+        """
+        Check that the jobs actually worked, and redo them if not
+        """
+        todo = []
+        for i in range(1, self.Nnnp+1):
+            nnppath=f'{self.path}/NNP{i}'
+            if not Path(f"{nnppath}/predict/testpoints.000000.out").is_file():
+                todo += [i]
+        if len(todo)>0:
+            print(f"├─▶︎ Predict of NNPs[{todo}] failed, relaunching them...\n│",flush=True)
+            predict = []
+            for i in todo:
+                predict += [SlurmJob(
+                    type    = 'nnp-train', 
+                    path    = f"{self.path}/NNP{i}/predict", 
+                    cluster = self.clusterNNP,
+                    jobname = f"predict{i}", 
+                    launch  = True)]
+            while any([p.is_running() for p in predict]) == True:
+                time.sleep(10)
+            print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
+            self.check_predict()
+        else:
+            print(f"├─▶︎ Predict of all NNPs successful.\n│",flush=True)
+            return(True)
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
     def do_vasp(self, indexes):
@@ -612,9 +750,10 @@ class AdaptiveTraining:
         atoms = read_inputdata(f"{self.path}/EW.data")[0]
         print(f"├─────▶︎ Computing the EW structures to add them to the dataset",flush=True)
         print(f"├─▶︎ Found {len(atoms)} EW structures",flush=True)
+        todo = [i for i in range(len(atoms)) if not Path(f"{self.path}/EW/OUTCAR_{i}.inp").is_file()]
+        print(f"├─ ...of which {len(todo)} to compute: {todo}", flush=True)
         for i in range(len(atoms)):
             write(f"{self.path}/EW/POSCAR_{i}", atoms[i], format = "vasp", vasp5 = True)
-        todo = [i for i in range(len(atoms)) if not Path(f"{self.path}/EW/OUTCAR_{i}.inp").is_file()]
         if len(todo)>0:
             vasp = []
             Nnodes = self.vasp_Nnodes if len(todo)>=self.vasp_Nnodes else len(todo)
