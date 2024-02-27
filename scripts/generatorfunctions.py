@@ -15,7 +15,7 @@ from ase.io.lammpsdata import Prism, convert
 from pathlib import Path
 from scipy.spatial import distance
 import itertools
-
+import datetime
 
 metals = {'Ag': 4.0853,
           'Au': 4.0782,
@@ -60,7 +60,8 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'island7':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18]),
           'island8':(3,6,[0,1,2,3,4,5,11,35,21,7,13,6,18,12,24,25,31,30]),
           'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
-          'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35])
+          'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
+          'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
@@ -289,29 +290,133 @@ print \"Job done.\"
 # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-def write_slurm_job(outputfile="my_job", jobname="my_job", partition="B2-2", ntasks=1, command=""):
-    """ Write a job file for submission to SLURM
+def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/Boro_ML/", append=False):
+    """ 
+    Write a job file for submission to SLURM
     #### Parameters
-    outputfile: str
-        Name of the job file
+    
     jobname   : str
         Name of the job in SLURM's queue
-    partition : str
-        Name of the partition to submit the job to
-    ntasks    : int
-        Number of processors to use
-    command   : str
-        Command to give to the cluster
+    node : str
+        Name of the node to submit the job to
+    N    : int or float
+        If int > 1, number of processors to use. If float in [0,1], proportion of the node to use.
+    workingpath   : str
+        Path to the working directory
+    append : logical
+        If True, append to the file, otherwise write just the header.
     """
-    os.makedirs(Path(outputfile).parent, exist_ok=True)
-    f = open(outputfile, "w")
-    f.write(f"""#!/bin/bash
-#SBATCH --job-name={jobname}
-#SBATCH --partition={partition}
-#SBATCH --ntasks={ntasks}
-#SBATCH --nodes=1-1
-tmp=/scratch
-{command}
+    
+    f = open(jobname, "a" if append else "w")
+    
+    if node == "l-node01":
+        queue = "a22"
+        nproc = 96
+    elif node == "l-node02":
+        queue = "a22"
+        nproc = 96
+    elif node == "l-node03":
+        queue = "f22"
+        nproc = 112
+    elif node == "l-node04":
+        queue = "p22"
+        nproc = 128
+    elif node == "l-node05":
+        queue = "p22"
+        nproc = 112
+    elif node == "l-node06":
+        queue = "p22"
+        nproc = 128
+    elif node == "node23":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node24":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node25":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node26":
+        queue = "tc1"
+        nproc = 40
+    elif node == "node27":
+        queue = "tc1"
+        nproc = 40
+    elif node == "node28":
+        queue = "tc1"
+        nproc = 40
+    elif node == "node29":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node30":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node31":
+        queue = "tc3"
+        nproc = 48
+    elif node == "node32":
+        queue = "tc2"
+        nproc = 40
+    elif node == "node33":
+        queue = "tc3"
+        nproc = 96
+    elif node == "node34":
+        queue = "tc3"
+        nproc = 48
+    elif node == "node35":
+        queue = "tc3"
+        nproc = 48
+    elif node == "node36":
+        queue = "tc3"
+        nproc = 48
+    elif node == "node37":
+        queue = "tc4"
+        nproc = 80
+    elif node == "node38":
+        queue = "tc5"
+        nproc = 128
+    else:
+        sys.exit(f"Node {node} not found in the list of nodes.")
+    if N>0:
+        if N>1:
+            nproc = int(N)
+        else:
+            nproc = int(N*nproc)
+    NTHREAD = 2
+    nppt = int(nproc/NTHREAD)
+    
+    if append==False: # write the header
+        f.write(f"""#!/bin/bash
+
+#SBATCH -J {jobname}
+#SBATCH -A theochem
+#SBATCH -p {queue}
+#SBATCH -N 1
+#SBATCH -n {nproc}
+#SBATCH -w {node}
+#SBATCH -t UNLIMITED
+#SBATCH -o {workingpath}/{jobname}.o
+#SBATCH -e {workingpath}/{jobname}.e
+
+source /home/cbousige/bin/n2p2/env.sh
+
+""")
+    else:
+        # create a new directory for the job with the jobname and current date and time
+        ct = f"{datetime.datetime.now()}".replace(" ", "_")
+        mydir = f"{jobname}_{os.path.basename(workingpath)}_{ct}"
+        f.write(f"""
+echo \"Working on: {workingpath}\"
+mkdir -p /scratch/$USER/{mydir} || exit 1
+cd /scratch/$USER/{mydir}
+PAT=\"{workingpath}\"
+cp $PAT/input.lmp .
+cp $PAT/*.data .
+cp $PAT/input.nn .
+mpirun -np {nppt} /home/cbousige/bin/lammps-27May2021/src/lmp_mpi -sf omp -pk omp {NTHREAD} < $PAT/input.lmp > $PAT/lammps.out
+cp -p *.lammpstrj $PAT
+cp -p *log* $PAT
+
 """)
     f.close()
 
@@ -417,7 +522,8 @@ def create_structure(
     a=None,
     island_size=0.,
     island_shape='circle',
-    island_angle=0.
+    island_angle=0.,
+    island_rotate=0.
     ):
     """Create a borophene structure on a substrate
     
@@ -466,10 +572,12 @@ def create_structure(
         If a is provided, use it as the lattice parameter of the metal slab, otherwise use the default one ({'Ag': 4.04, 'Au': 4.0782, 'Cu': 3.6149, 'Pt': 3.9242, 'Ni': 3.5240, 'Ir': 3.8390, 'Si': 5.4309}).
     island_size : float
         If island_size>0 is provided, remove all B atoms outside a surface of shape island_shape and size island_size centered on the substrate center.
-    island_shape : str, one of ('circle', 'square', 'triangle')
+    island_shape : str, one of ('circle', 'square', 'triangle', 'hexagon')
         If island_size>0 is provided, remove all B atoms outside a surface of shape island_shape and size island_size centered on the substrate center.
     island_angle : float
         Rotation of the borophene island (in degrees) with respect to the substrate
+    island_rotate : float
+        Rotation of the borophene island (in degrees) with respect to the borophene structure
     """
     # # # # # # # # # 
     # Create borophene polymorph
@@ -535,7 +643,7 @@ def create_structure(
             BCintercept = B[1] - BCslope*B[0]
             CDintercept = C[1] - CDslope*C[0]
             DAintercept = D[1] - DAslope*D[0]
-            # Remove atoms outside the triangle
+            # Remove atoms outside the square
             if island_angle == 0:
                 B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
                         (np.abs(at.position[0])>=ABintercept or 
@@ -574,9 +682,71 @@ def create_structure(
                             (at.position[1] >= ABslope*at.position[0]+ABintercept or
                              at.position[1] <= BCslope*at.position[0]+BCintercept or
                              at.position[1] >= ACslope*at.position[0]+ACintercept)]
+        if island_shape == 'hexagon':
+            # Triangle1 summits coordinates
+            delta = island_size/2/np.cos(np.pi/6)
+            A = (delta*np.cos(island_angle*np.pi/180)            , delta*np.sin(island_angle*np.pi/180))
+            B = (delta*np.cos(island_angle*np.pi/180 + 2*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 2*np.pi/3))
+            C = (delta*np.cos(island_angle*np.pi/180 + 4*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 4*np.pi/3))
+            ABslope = (A[1]-B[1])/(A[0]-B[0])
+            BCslope = (B[1]-C[1])/(B[0]-C[0])
+            ACslope = (A[1]-C[1])/(A[0]-C[0])
+            ABintercept = A[1] - ABslope*A[0]
+            BCintercept = B[1] - BCslope*B[0]
+            ACintercept = A[1] - ACslope*A[0]
+            # Remove atoms outside the triangle1
+            if island_angle == 0:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[0] <= -delta/2 or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle <= 60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle>60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] >= ACslope*at.position[0]+ACintercept)]
+            Btriangle1 = np.array([i for i in range(len(struct)) if i not in B_to_remove])
+            # Triangle2
+            delta = island_size/2/np.cos(np.pi/6)
+            island_angle = island_angle + 60
+            A = (delta*np.cos(island_angle*np.pi/180)            , delta*np.sin(island_angle*np.pi/180))
+            B = (delta*np.cos(island_angle*np.pi/180 + 2*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 2*np.pi/3))
+            C = (delta*np.cos(island_angle*np.pi/180 + 4*np.pi/3), delta*np.sin(island_angle*np.pi/180 + 4*np.pi/3))
+            ABslope = (A[1]-B[1])/(A[0]-B[0])
+            BCslope = (B[1]-C[1])/(B[0]-C[0])
+            ACslope = (A[1]-C[1])/(A[0]-C[0])
+            ABintercept = A[1] - ABslope*A[0]
+            BCintercept = B[1] - BCslope*B[0]
+            ACintercept = A[1] - ACslope*A[0]
+            # Remove atoms outside the triangle1
+            if island_angle == 0:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[0] <= -delta/2 or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle <= 60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] <= ACslope*at.position[0]+ACintercept)]
+            elif island_angle>60:
+                B_to_remove = [i for i,at in enumerate(struct) if at.symbol=='B' and 
+                            (at.position[1] >= ABslope*at.position[0]+ABintercept or
+                             at.position[1] <= BCslope*at.position[0]+BCintercept or
+                             at.position[1] >= ACslope*at.position[0]+ACintercept)]
+            Btriangle2 = np.array([i for i in range(len(struct)) if i not in B_to_remove])
+            Bstar = np.intersect1d(Btriangle1, Btriangle2)
+            B_to_remove = [i for i in range(len(struct)) if i not in Bstar]
         del struct[B_to_remove]
         struct.positions[:,0] += structa/2
         struct.positions[:,1] += structb/2
+        if island_rotate>0:
+            struct.rotate(island_rotate, 'z', center='COM', rotate_cell=False)
     # # # # # # # # #
     # Substrate
     # # # # # # # # #

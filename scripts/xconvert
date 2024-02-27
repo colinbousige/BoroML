@@ -98,7 +98,7 @@ def main(args):
         sys.exit()
     sys.stderr.write(f'Reading {input}... '); sys.stderr.flush()
     if ".lammpstrj" in input:
-        struc = read_lammps_dump(input, index = slice(0, -1))
+        struc = read_lammps_dump(input, index = slice(0, None))
         if not 'all' in image:
             struc = [struc[im] for im in image]
             comment = [f'{input} - image {im}' for im in image]
@@ -113,7 +113,7 @@ def main(args):
             struc = [struc[im] for im in image]
             comment = [comments[im] for im in image]
     elif "OUTCAR" in input:
-        struc = read_vasp_out(input, index = slice(0, -1))
+        struc = read_vasp_out(input, index = slice(0, None))
         if not 'all' in image:
             struc = [struc[im] for im in image]
             comment = [f'{input} - image {im}' for im in image]
