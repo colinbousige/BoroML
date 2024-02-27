@@ -53,8 +53,9 @@ def main(args):
     island_size = args.island_size
     island_shape = args.island_shape
     island_angle = args.island_angle
+    island_rotate = args.island_rotate
     
-    if island_size > 0 and island_shape not in ['circle', 'square', 'triangle']:
+    if island_size > 0 and island_shape not in ['circle', 'square', 'triangle', 'hexagon']:
         raise ValueError(f"\n{bold}{orange}Unknown island shape: {island_shape}{normal}\n")
 
     if D is not None:
@@ -87,7 +88,8 @@ def main(args):
             angle       = angle,
             island_size = island_size,
             island_shape= island_shape,
-            island_angle= island_angle
+            island_angle= island_angle,
+            island_rotate= island_rotate
         )
     nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -185,9 +187,10 @@ def main(args):
 
 """)
     if island_size > 0 :
-        sys.stderr.write(f"- Island size : {island_size} Å\n")
-        sys.stderr.write(f"- Island shape : {island_shape}\n")
-        sys.stderr.write(f"- Island angle : {island_angle}\n\n")
+        sys.stderr.write(f"- Island size   : {island_size} Å\n")
+        sys.stderr.write(f"- Island shape  : {island_shape}\n")
+        sys.stderr.write(f"- Island angle  : {island_angle}\n\n")
+        sys.stderr.write(f"- Island roation: {island_rotate}\n\n")
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -272,11 +275,15 @@ def get_parser():
                         type    = float,
                         default = 0)
     parser.add_argument('--island_shape', '-ish',
-                        help    = "Borophene island shape. Must be one of: 'circle', 'square', 'triangle'.",
+                        help    = "Borophene island shape. Must be one of: 'circle', 'square', 'triangle', 'hexagon'.",
                         type    = str,
                         default = 'circle')
     parser.add_argument('--island_angle', '-iang',
-                        help    = "Borophene island rotation angle in degrees.",
+                        help    = "Borophene island rotation 1 angle in degrees.",
+                        type    = float,
+                        default = 0)
+    parser.add_argument('--island_rotate', '-irot',
+                        help    = "Borophene island rotation 2 angle in degrees.",
                         type    = float,
                         default = 0)
     parser.add_argument('--out', '-out',

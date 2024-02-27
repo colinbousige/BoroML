@@ -203,9 +203,9 @@ int main(int Narg, char **argv){
             for (i = 0; i < Ntype; i++){
                 fprintf(stderr, "   Type %d = %s (%d)\n", i + 1, typelist[i], Ni[i]);fflush(stderr);
             }
-            fprintf(stderr,"\033[1;31mBox size   :\033[0m a = %.3lf\n", fabs(xhi-xlo));fflush(stderr);
-            fprintf(stderr,"             b = %.3lf\n", fabs(yhi-ylo));fflush(stderr);
-            fprintf(stderr,"             c = %.3lf\n", fabs(zhi-zlo));fflush(stderr);
+            fprintf(stderr,"\033[1;31mBox size:\n\033[0m   a = %.3lf\n", fabs(xhi-xlo));fflush(stderr);
+            fprintf(stderr,"   b = %.3lf\n", fabs(yhi-ylo));fflush(stderr);
+            fprintf(stderr,"   c = %.3lf\n", fabs(zhi-zlo));fflush(stderr);
             fprintf(stderr, "\n");fflush(stderr);
             if(Zproj==1){fprintf(stderr, "Computing \033[1;31mz-density\033[0m.\n");fflush(stderr);}
             if(Zproj==0){
