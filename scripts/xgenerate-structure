@@ -146,19 +146,15 @@ def main(args):
         struc.set_constraint(c)
         struc = sort(struc, tags = struc.get_masses())
     if out=='vasp':
-        write(sys.stdout,
-              images = struc, 
-              format = "vasp", 
-              vasp5  = True)
+        write(sys.stdout, images = struc, format = "vasp", vasp5 = True)
     elif out=='lammps':
         write_lammps(None, struc,
-                     comments = f"# {allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+            comments = f"# {allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
     elif out=='xyz':
-        write(sys.stdout,
-              images = struc, 
-              format = "xyz")
+        write(sys.stdout, images = struc, format = "xyz")
     elif out=='n2p2':
-        write_inputdata(struc, f"{allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+        write_inputdata(struc, 
+            f"{allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
     else:
         raise ValueError(f"\n{bold}{orange}Unknown output format: {out}{normal}\n")
 
@@ -191,6 +187,8 @@ def main(args):
         sys.stderr.write(f"- Island shape  : {island_shape}\n")
         sys.stderr.write(f"- Island angle  : {island_angle}\n\n")
         sys.stderr.write(f"- Island roation: {island_rotate}\n\n")
+    if args.glimpse:
+        view(struc)
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
@@ -290,6 +288,10 @@ def get_parser():
                         help    = "Output file format. Must be one of: vasp, xyz, lammps, or n2p2.",
                         type    = str,
                         default = 'vasp')
+    parser.add_argument('--glimpse', '-g', 
+                        action  = "store_true",
+                        default = False, 
+                        help    = "Show the structure with ASE.")
 
     parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
     return parser
