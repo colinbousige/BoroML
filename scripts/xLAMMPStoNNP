@@ -50,7 +50,9 @@ def main(args):
         os.system(f"rm -f {destination}/EW.data")
     
     base_path = os.getcwd() # Get the current working directory
-    traj_files = np.array([glob.glob(f"{base_path}/{folder}/*/*{pattern}*.lammpstrj") for folder in folders]).flatten()
+    traj_files = np.array([])
+    for folder in folders:
+        traj_files = np.append(traj_files, glob.glob(f"{base_path}/{folder}/*/*{pattern}*.lammpstrj"))
     os.makedirs(destination, exist_ok=True)
     counter = 0
     counterew = 0

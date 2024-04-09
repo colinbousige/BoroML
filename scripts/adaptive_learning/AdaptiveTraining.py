@@ -100,7 +100,8 @@ class AdaptiveTraining:
                  clusterNNP  = Cluster(),
                  clusterVASP = Cluster(),
                  vasp_Nnodes = 4,
-                 Nepoch: int = None
+                 Nepoch: int = None,
+                 atoms       = "BAg"
                  ):
         self.path = path
         """Working directory"""
@@ -118,6 +119,8 @@ class AdaptiveTraining:
         """Numbers of NNPs: gotten from the number of 'inputX.nn' files"""
         self.Ncomb = sum(1 for _ in combinations(range(self.Nnnp), 2))
         """Numbers of combinations of NNPs: automatic determination from self.Nnnp"""
+        self.atoms = atoms
+        """Atom types in the system"""
         self.initialize()
         if Nepoch is None:
             self.Nepoch  = self.get_epochs()
@@ -298,10 +301,14 @@ class AdaptiveTraining:
         print(f"├─ Copying weights from epochs {BestRmse}...\n│", flush=True)
         for i in range(1, self.Nnnp+1):
             nnppath=f'{self.path}/NNP{i}'
-            subprocess.run(f'cp {nnppath}/train/weights.047.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.047.data', shell=True)
+            if self.atoms == "BAg":
+                subprocess.run(f'cp {nnppath}/train/weights.047.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.047.data', shell=True)
+                subprocess.run(f'cp {nnppath}/train/weights.047.data {nnppath}/predict/', shell=True)
+            if self.atoms == "BAu":
+                subprocess.run(f'cp {nnppath}/train/weights.079.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.079.data', shell=True)
+                subprocess.run(f'cp {nnppath}/train/weights.079.data {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/weights.005.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.005.data', shell=True)
             subprocess.run(f'cp {nnppath}/train/weights.005.data {nnppath}/predict/', shell=True)
-            subprocess.run(f'cp {nnppath}/train/weights.047.data {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/input.nn {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/scaling.data {nnppath}/predict/', shell=True)
             # subprocess.run(f'mv {nnppath}/train/input.nn.bak {nnppath}/train/input.nn', shell=True)
@@ -548,6 +555,7 @@ class AdaptiveTraining:
         scale = []
         for i in range(1, self.Nnnp+1):
             scale += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-scaling', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -576,6 +584,7 @@ class AdaptiveTraining:
             scale = []
             for i in todo:
                 scale += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-scaling', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -599,6 +608,7 @@ class AdaptiveTraining:
         train = []
         for i in range(1, self.Nnnp+1):
             train += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -626,6 +636,7 @@ class AdaptiveTraining:
             train = []
             for i in todo:
                 train += [SlurmJob(
+                        atoms   = self.atoms,
                         type    = 'nnp-train', 
                         path    = f"{self.path}/NNP{i}/train", 
                         cluster = self.clusterNNP,
@@ -648,6 +659,7 @@ class AdaptiveTraining:
         nnps = []
         for i in range(1, self.Nnnp+1):
             nnps += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-all', 
                     path    = f"{self.path}/NNP{i}", 
                     Nepoch  = self.Nepoch,
@@ -669,6 +681,7 @@ class AdaptiveTraining:
         predict = []
         for i in range(1, self.Nnnp+1):
             predict += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/predict", 
                     cluster = self.clusterNNP,
@@ -696,6 +709,7 @@ class AdaptiveTraining:
             predict = []
             for i in todo:
                 predict += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/predict", 
                     cluster = self.clusterNNP,
@@ -724,6 +738,7 @@ class AdaptiveTraining:
             Nnodes = self.vasp_Nnodes if len(todo)>=self.vasp_Nnodes else len(todo)
             for i in range(Nnodes):
                 vasp += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = "vasp", 
                     path    = f"{self.path}/vasp", 
                     cluster = self.clusterVASP,
@@ -759,6 +774,7 @@ class AdaptiveTraining:
             Nnodes = self.vasp_Nnodes if len(todo)>=self.vasp_Nnodes else len(todo)
             for i in range(Nnodes):
                 vasp += [SlurmJob(
+                    atoms   = self.atoms,
                     type    = "vasp", 
                     path    = f"{self.path}/EW", 
                     cluster = self.clusterVASP,

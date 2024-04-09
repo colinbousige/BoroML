@@ -161,7 +161,7 @@ def main(args):
     count=""
     if substrate != 'None':
         count=f"({len([s for s in struc.get_chemical_symbols() if s =='B'])} B, {len([s for s in struc.get_chemical_symbols() if s !='B'])} {substrate})"
-    sys.stderr.write(f"""\n{bold}Structure parameters:{normal}
+    sys.stderr.write(f"""\n{bold}{orange}Structure parameters:{normal}
 
 - Allotrope               : {allotrope}
 - Supercell dimension     : {nx}x{ny}

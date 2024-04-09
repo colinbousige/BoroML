@@ -18,7 +18,7 @@ import itertools
 import datetime
 
 metals = {'Ag': 4.0853,
-          'Au': 4.0782,
+          'Au': 4.112,
           'Al': 4.0495,
           'Cu': 3.6149,
           'Pt': 3.9242,
@@ -61,7 +61,8 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'island8':(3,6,[0,1,2,3,4,5,11,35,21,7,13,6,18,12,24,25,31,30]),
           'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
           'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
-          'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35])
+          'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35]),
+          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
@@ -95,6 +96,7 @@ def write_lammps_input(
     minimize        = True,
     ftol            = 0.01,
     outPE           = False,
+    outF            = False,
     velocities      = False):
     """ Writes a LAMMPS input file from the given parameters (for batch writing of input files)
     
@@ -149,7 +151,9 @@ def write_lammps_input(
     velocities      : logical
         Save velocities in the dump files?
     outPE           : logical
-        Save individual elergies in the dump file?
+        Save individual energies in the dump file?
+    outF            : logical
+        Save individual forces in the dump file?
     """
     os.makedirs(os.path.dirname(outputfile), exist_ok=True)
     if len(ts)!=len(damp) or len(ts)!=len(runtime) or len(damp)!=len(runtime):
@@ -174,7 +178,7 @@ dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
         else:
             jobname = "prod"
             MDrun += f"""\n#------- Production -------
-dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}
+dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}{" fx fy fz" if outF else ""}
 dump_modify    dmp{jobname} flush yes sort id element B {substrate}
 reset_timestep 0"""
             if prodtype!='nve':
@@ -184,23 +188,23 @@ reset_timestep 0"""
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-{mymd}
 timestep    {dt}
+{mymd}
 run         {N}
 unfix       md{jobname}
 undump      dmp{jobname}
 """
     if T2 is not None and prodtype!='nve':
         MDrun += f"""\n#------- Cooling Production -------
-dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}2.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}
+dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}2.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}{" fx fy fz" if outF else ""}
 dump_modify    dmp{jobname} flush yes sort id element B {substrate}
 reset_timestep 0"""
         mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T1}} ${{T2}} $({dp}*dt)"""
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-{mymd}
 timestep    {dt}
+{mymd}
 run         {N}
 unfix       md{jobname}
 undump      dmp{jobname}
@@ -211,7 +215,7 @@ undump      dmp{jobname}
         mini = f"""
 #-−-−−---−---−−−− Cell optimization −−−−−−−−-------
 thermo         10
-dump minidmp   all custom 10 ${{dumpname}}_mini.lammpstrj id element x y z{" c_pe" if outPE else ""}
+dump minidmp   all custom 10 ${{dumpname}}_mini.lammpstrj id element x y z{" c_pe" if outPE else ""}{" fx fy fz" if outF else ""}
 dump_modify    minidmp flush yes sort id element B {substrate}
 fix            freeze fixedlayer setforce 0.0 0.0 0.0
 minimize       0 ${{ftol}} 1000 10000
@@ -830,6 +834,7 @@ def create_structure(
     # View structure with ASE
     if glimpse:
         view(struct)
+    struct.pbc = [1,1,1]
     return(struct)
 
 

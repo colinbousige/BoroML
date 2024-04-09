@@ -75,7 +75,7 @@ class SlurmJob:
     True
     """
     
-    def __init__(self, type: str, cluster: Cluster, path='.', Nepoch=30,
+    def __init__(self, type: str, cluster: Cluster, path='.', Nepoch=30, atoms = "BAg",
                  jobname='job', numbers=[], launch=False, maxtries=20, wait=3):
         if not type in ['vasp', 'nnp-train', 'nnp-scaling', 'nnp-all']:
             raise TypeError("type must be one of 'vasp', 'nnp-train', 'nnp-scaling', or 'nnp-all'.")
@@ -106,6 +106,8 @@ class SlurmJob:
         """Cluster object"""
         self.Nepoch    = Nepoch
         """Numbers of epochs in the training part"""
+        self.atoms     = atoms
+        """Atom types in the system"""
         self.wait      = wait
         """Time to wait between submission tries"""
         if launch:
@@ -140,9 +142,9 @@ source $VASPDIR/env.sh
 
 mkdir -p $WDIR || exit 1
 cd $WDIR
-cp {inputs_VASP}/INCAR $WDIR
-cp {inputs_VASP}/POTCAR $WDIR
-cp {inputs_VASP}/KPOINTS $WDIR
+cp {inputs_VASP}/INCAR .
+cp {inputs_VASP}/POTCAR_{self.atoms} ./POTCAR
+cp {inputs_VASP}/KPOINTS .
 """
         if "nnp" in self.type:
             add = f"""export N2P2DIR={basepath}/{self.n2p2dir}
