@@ -506,6 +506,7 @@ def create_structure(
     nx=3, 
     ny=3, 
     listholes=[0, 10],
+    allotrope=None,
     repeatx=1,
     repeaty=1,
     metalchoice="Ag",
@@ -513,7 +514,7 @@ def create_structure(
     vdwdist=2.45,
     vac=25,
     angle=0,
-    NZ=4,
+    NZ=3,
     random=0,
     v=1,
     size_min=None,
@@ -538,6 +539,8 @@ def create_structure(
         Number of base borophene cell along y
     listholes  : [int]
         List of atoms to remove
+    allotrope  : str
+        Predefined allotrope
     repeatx    : int
         Repeat the borophene stucture along x
     repeaty    : int
@@ -586,6 +589,11 @@ def create_structure(
     # # # # # # # # # 
     # Create borophene polymorph
     # # # # # # # # #
+    if allotrope is not None:
+        if allotrope in predef.keys():
+            nx, ny, listholes = predef[allotrope]
+        else:
+            sys.exit(f"Unknown allotrope: {allotrope}.")
     aa = 1.62*2*np.cos(30*np.pi/180)
     bb = 1.62
     cc = 2.5
