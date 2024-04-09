@@ -104,12 +104,22 @@ int main(int Narg, char **argv){
     Nbin = (int)((Rmax)/dr)+1;
     double invstep=1.0/dr;
 
-    sscanf(read_line(input,4,ligne) ,"%d",&N);
-    sscanf(read_line(input,6,ligne) ,"%lf %lf",&xlo,&xhi);
-    sscanf(read_line(input,7,ligne) ,"%lf %lf",&ylo,&yhi);
-    sscanf(read_line(input,8,ligne) ,"%lf %lf",&zlo,&zhi);
+    // read the whole file and find the number of lines containing the string "TIMESTEP"
+    // to get the number of images. Also get he maximum number of atoms in all the images.
+    fp = fopen(input,"r");
+    Nimages = 0; N=0;
+    while(fgets(ligne, sizeof(ligne), fp)){
+        if(strstr(ligne,"ITEM: TIMESTEP")){Nimages++;}
+        if(strstr(ligne,"ITEM: NUMBER OF ATOMS")){
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%d",&N1);
+            if (N1 > N){N = N1;}
+        }
+    }
+    fclose(fp);
+    atom = calloc(N1, sizeof(double *));
+    for(i = 0; i < N1; i++){atom[i] = calloc(3, sizeof(double));}
+    type = calloc(N1, sizeof(int));
 
-    Nimages = (int)(nb_lines(input) / (N + 9));
     for(i = 0; i < 100; i++) {
         typelist[i] = malloc((4) * sizeof(char));
     }
@@ -151,23 +161,25 @@ int main(int Narg, char **argv){
         }
     }
 
-    atom = calloc(N, sizeof(double *));
-    type = calloc(N, sizeof(int));
-    for(i = 0; i < N; i++){atom[i] = calloc(3, sizeof(double));}
-
     /* Let's read the trajectory */
 
     fp = fopen(input,"r");
-    for(i=0;j<skip;j++){
-        for(i=0;i<N+9;i++){
-            fgets(ligne, sizeof(ligne), fp);
+    N1 = 0;
+    if (skip > 0) {
+        while(fgets(ligne, sizeof(ligne), fp)){
+            if(strstr(ligne,"ITEM: TIMESTEP")){N1++;}
+            if(N1 == skip){break;}
         }
     }
     n = 0;
     while(n<Nimages){
         /* Header */
-        fgets(ligne, sizeof(ligne), fp); fgets(ligne, sizeof(ligne), fp);
-        fgets(ligne, sizeof(ligne), fp); fgets(ligne, sizeof(ligne), fp);
+        while(fgets(ligne, sizeof(ligne), fp)){
+            if(strstr(ligne,"ITEM: NUMBER OF ATOMS")){
+                fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%d",&N);
+                break;
+            }
+        }
         fgets(ligne, sizeof(ligne), fp);
         fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&xlo,&xhi);
         fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&ylo,&yhi);

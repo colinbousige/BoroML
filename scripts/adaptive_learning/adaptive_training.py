@@ -4,19 +4,20 @@ from adaptive_learning import *
 
 # Create a Cluster object:
 lynxvasp = Cluster(preferred_node = 'l-node04',
-                   forbid_nodes   = ['node31'],
-                   forbid_queues  = ['tc1', 'tc5'])
+                   forbid_nodes   = ['node31', 'l-gnode01'],
+                   forbid_queues  = ['tc1', 'tc5', 'cl24'])
 lynxnnp  = Cluster(preferred_node = 'l-node04',
-                   forbid_nodes   = ['node31'],
-                   forbid_queues  = ['tc1', 'tc5'])
+                   forbid_nodes   = ['node31', 'l-gnode01'],
+                   forbid_queues  = ['tc1', 'tc5', 'cl24'])
 # Initialize an AdaptiveTraining object:
-AT = AdaptiveTraining(Nadd        = 50, 
+AT = AdaptiveTraining(Nadd        = 20, 
                       restart     = False, 
                     #   restart     = True, 
                       Nepoch      = 7,
                       clusterNNP  = lynxnnp,
                       clusterVASP = lynxvasp,
-                      vasp_Nnodes = 5)
+                      vasp_Nnodes = 5,
+                      atoms       = "BAg")
 # /!\ Set to restart=True if restarting after stopping job, 
 # /!\ otherwise it will restart from scratch!
 
