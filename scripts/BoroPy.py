@@ -70,7 +70,20 @@ dico_predef = {'\u03b1'  :(3,3,[0,10]), #alpha
                '\u03b211':(12,8,[0,4,19,28,43,53,68,77,92,102,117,126,141,151,166,175,190,
                                  24,23,47,49,64,73,88,98,113,122,137,147,162,171,186]),    #beta11
                '\u03b212':(1,3,[0]),    #beta12
-               '\u03b213':(2,3,[0,4])   #beta13
+               '\u03b213':(2,3,[0,4]),   #beta13,
+               'island1':(3,6,[0,4,5,30,31,32,35,24,11,6,23,29,28,21,10,17,22,14,26,2,7,20,1,12]),
+               'island2':(3,6,[0,4,5,30,31,32,35,24,11,6,23,29,21,10,17,22,14,26,2,7,20,1,12,33,27,28]),
+               'island3':(3,6,[0,4,5,30,31,32,33,34,35,24,11,6,23,29,28,18,9,21,10,17,22,14,26,2]),
+               'island4':(3,6,[0,1,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,25,18,16,9,21,10,17,22]),
+               'island5':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18,16,9,21,10,17,22]),
+               'island6':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18,15]),
+               'island7':(3,6,[0,1,2,3,4,5,30,31,32,33,34,35,12,24,11,6,23,29,28,27,26,25,18]),
+               'island8':(3,6,[0,1,2,3,4,5,11,35,21,7,13,6,18,12,24,25,31,30]),
+               'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
+               'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
+               'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35]),
+               'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35]),
+               'noBoro':(1,2,[0,1,2,3])
                }
 
 st.set_page_config(
@@ -152,12 +165,9 @@ st.write("""
 c1, outcol = st.columns((4, 1))
 
 st.sidebar.write("# Borophene Lattice")
+predef = st.sidebar.selectbox("Predefined structures", ['']+[k for k in dico_predef.keys()], key='predef')
 
 col1,col2 = st.sidebar.columns((1, 1))
-
-predef = col1.selectbox("Predefined structures", ['']+[k for k in dico_predef.keys()], key='predef')
-Nboro = col2.number_input("Number of borophene layers", min_value=1, value=1, key="Nboro")
-
 if predef != '':
     st.session_state.Nx = dico_predef[predef][0]
     st.session_state.Ny = dico_predef[predef][1]
@@ -196,6 +206,22 @@ island_shape = right.selectbox("Borophene island shape", ('Circle','Square','Tri
 island_angle = left.number_input( "Rotate 1 island [˚]", min_value=0., max_value=90., value=0., step=5., key="island_angle")
 island_rotate = right.number_input( "Rotate 2 island [˚]", min_value=0., max_value=90., value=0., step=5., key="island_rotate")
 
+# # # # # # # # # # # # # # # # # # 
+st.sidebar.write("# Multilayered Borophene")
+left, right = st.sidebar.columns((1, 1))
+Nboro = left.number_input("Number of borophene layers", min_value=1, value=1, key="Nboro")
+toplayer = right.selectbox("Top layer", ['']+[k for k in islands.keys()], key='predefislands')
+TopLayer = None if toplayer=='' else islands[toplayer]
+randshifttop = left.number_input("Random lateral shift of top layers", min_value=0., max_value=10., value=0., step=0.5)
+
+
+# # # # # # # # # # # # # # # # # # 
+st.sidebar.write("# Solubilized Boron")
+left, right = st.sidebar.columns((1, 1))
+NsolubleB = left.number_input("Number of solubilzed boron atoms", min_value=0, max_value=None, value=0, step=1)
+dilate = right.number_input("Metal dilatation", min_value=0., max_value=None, value=1.2, step=.1)
+
+
 if ny==1:
     metalchoice=''
 
@@ -222,7 +248,9 @@ struct = create_structure(
     island_size =island_size,
     island_shape=island_shape.lower(),
     island_angle=island_angle,
-    island_rotate=island_rotate
+    island_rotate=island_rotate,
+    toplayer=TopLayer,
+    randshifttop=randshifttop
 )
 
 base = create_structure(
@@ -277,6 +305,8 @@ tab1, tab2, tab3 = c1.tabs(["2D view", "3D view", "Output"])
 collist = {'Ag':'silver', 'Al':'lightgrey', 'Au':'gold', 'Cu':'#fdb07d', 
            'Pt':'lightgrey', 'Ni':'#fed776', 'Ir':'lightgrey', 'Si':'lightgrey'}
 
+if NsolubleB>0:
+    struct = solubilize_boron(struct, NsolubleB, dilate)
 
 with tab1:
     # # # # # # # # # # # # # # # # # # 

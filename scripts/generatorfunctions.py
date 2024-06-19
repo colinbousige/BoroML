@@ -62,13 +62,25 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
           'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
           'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35]),
-          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35])
+          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35]),
+          'noBoro':(1,2,[0,1,2,3])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #  FUNCTIONS DEFINITIONS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+def random_vector(dim=3):
+    """
+    Generate a random unit vector in dimension `dim`
+    """
+    x_norm = 2.0
+    while x_norm > 1:  # This is to ensure uniform distribution in space
+        xi = np.random.uniform(-1, 1, dim)
+        x_norm = np.linalg.norm(xi)
+    return xi/x_norm
+
 
 def write_lammps_input(
     inputfile       = "Boro1,3_0-Ag_fcc111_2,2,4.data", 
@@ -89,6 +101,7 @@ def write_lammps_input(
     showew          = "no",
     showewsum       = 1,
     maxew           = 200, 
+    resetew         = 'no',
     nnpCutoff       = 6.36,
     potpath         = "~/Boro_ML/MD/potentials/nnp-NPT-multiconfig/",
     fix_sub         = None,
@@ -97,7 +110,8 @@ def write_lammps_input(
     ftol            = 0.01,
     outPE           = False,
     outF            = False,
-    velocities      = False):
+    velocities      = False,
+    nnp             = 'n2p2'):
     """ Writes a LAMMPS input file from the given parameters (for batch writing of input files)
     
     #### Parameters
@@ -133,7 +147,9 @@ def write_lammps_input(
     MDtype          : str
         Type of MD fix: "nvt" or "npt" or "nve. If 'nve', thermalization is performed in 'nvt' and production in 'nve'.
     showew          : "yes" or "no"
-        Show Ewald sum computation during MD ?
+        Show EW summary during MD ?
+    resetew         : "yes" or "no"
+        Reset EW count every step during MD ?
     showewsum       : int
         Write EW summary every this many timesteps
     nnpCutoff       : float
@@ -154,6 +170,8 @@ def write_lammps_input(
         Save individual energies in the dump file?
     outF            : logical
         Save individual forces in the dump file?
+    nnp             : str
+        NNP type: 'n2p2' or 'deepmd'
     """
     os.makedirs(os.path.dirname(outputfile), exist_ok=True)
     if len(ts)!=len(damp) or len(ts)!=len(runtime) or len(damp)!=len(runtime):
@@ -163,6 +181,8 @@ def write_lammps_input(
     else:
         moving = "all"
         fix_sub = 1
+    if nnp.lower() not in ['n2p2','deepmd']:
+        sys.exit("NNP type must be 'n2p2' or 'deepmd'.")
     MDrun = ""
     prodtype = "nvt"
     if MDtype == 'nve':
@@ -172,38 +192,40 @@ def write_lammps_input(
         if(i<len(ts)-1):
             jobname = f"equil{i+1}"
             MDrun += f"""\n#------- Thermalization {i+1} -------
+timestep       {dt}
 dump           dmp{jobname} all custom 1000 ${{dumpname}}_{jobname}.lammpstrj id element x y z
 dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
-            mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T0}} ${{T0}} $({dp}*dt)"
+            mymd = f"fix            md{jobname} {moving} {MDtype} temp ${{T0}} ${{T0}} $({dp}*dt)"
         else:
             jobname = "prod"
             MDrun += f"""\n#------- Production -------
+timestep       {dt}
+reset_timestep 0
 dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}{" fx fy fz" if outF else ""}
-dump_modify    dmp{jobname} flush yes sort id element B {substrate}
-reset_timestep 0"""
+dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
             if prodtype!='nve':
-                mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T0}} ${{T1}} $({dp}*dt)"
+                mymd = f"fix            md{jobname} {moving} {MDtype} temp ${{T0}} ${{T1}} $({dp}*dt)"
             else:
-                mymd = f"fix         md{jobname} {moving} nve"
+                mymd = f"fix            md{jobname} {moving} nve"
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-timestep    {dt}
 {mymd}
-run         {N}
-unfix       md{jobname}
-undump      dmp{jobname}
+run            {N}
+unfix          md{jobname}
+undump         dmp{jobname}
 """
     if T2 is not None and prodtype!='nve':
         MDrun += f"""\n#------- Cooling Production -------
+timestep       {dt}
+reset_timestep 0
 dump           dmp{jobname} all custom ${{dumptime}} ${{dumpname}}_{jobname}2.lammpstrj id element x y z{" vx vy vz" if velocities else ""}{" c_pe" if outPE else ""}{" fx fy fz" if outF else ""}
 dump_modify    dmp{jobname} flush yes sort id element B {substrate}
-reset_timestep 0"""
+"""
         mymd = f"fix         md{jobname} {moving} {MDtype} temp ${{T1}} ${{T2}} $({dp}*dt)"""
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-timestep    {dt}
 {mymd}
 run         {N}
 unfix       md{jobname}
@@ -227,7 +249,12 @@ reset_timestep 0
         miniheader=f"""
 # Minimization tolerance on Forces
 variable ftol        equal {ftol}"""
-
+    if nnp.lower()=='n2p2':
+        potential = f"""pair_style hdnnp ${{nnpCutoff}} dir ${{nnpDir}} showew {showew} resetew {resetew} showewsum {showewsum} maxew {maxew} cflength 1.8897261328 cfenergy 0.0367493254
+pair_coeff * * B {substrate}"""
+    if nnp.lower()=='deepmd':
+        potential = f"""pair_style deepmd ${{nnpDir}}
+pair_coeff * * B {substrate}"""
     f = open(outputfile, "w")
     writeT2=""
     if T2 is not None:
@@ -269,21 +296,18 @@ group      fixedlayer region regfixedlayer
 group      mobile subtract all fixedlayer
 
 #−−−−−−−−−−−−−−−−−−− Potential -−−−−−−−−−−−−−−−−−−−
-pair_style nnp dir ${{nnpDir}} showew {showew} showewsum {showewsum} maxew {maxew} &
-           cflength 1.8897261328 cfenergy 0.0367493254 emap "1:B,2:{substrate}"
-pair_coeff * * ${{nnpCutoff}}
+{potential}
 
 #−−−−−−−−−−−−−−−−−−−− Output −−−−−−−−−−−−−−−−−−−−−−
-compute       mytemp {moving} temp # the temperature is computed on moving atoms only
-thermo_style  custom step c_mytemp ke pe etotal press lx ly lz
-thermo_modify norm yes # extensive quantities will be normalized per atom
-thermo        ${{thermoprint}}
-{"compute       pe all pe/atom" if outPE else '' }
+compute        mytemp {moving} temp # the temperature is computed on moving atoms only
+thermo_style   custom step c_mytemp ke pe etotal press lx ly lz
+thermo_modify  norm yes # extensive quantities will be normalized per atom
+thermo         ${{thermoprint}}
+{"compute        pe all pe/atom" if outPE else '' }
 {mini}
-
 #−−−−−−−−−−−−−−−−−−−− MD Run ---−−−−−−−−−−−−−−−−−−−
 # Create initial velocities
-velocity   {moving} create ${{T0}} {seed}
+velocity       {moving} create ${{T0}} {seed}
 {MDrun}
 
 print \"Job done.\"
@@ -294,7 +318,7 @@ print \"Job done.\"
 # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/Boro_ML/", append=False):
+def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/Boro_ML/", append=False, full=False, dirname="."):
     """ 
     Write a job file for submission to SLURM
     #### Parameters
@@ -311,7 +335,7 @@ def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/
         If True, append to the file, otherwise write just the header.
     """
     
-    f = open(jobname, "a" if append else "w")
+    f = open(f"{dirname}/{jobname}", "a" if append else "w")
     
     if node == "l-node01":
         queue = "a22"
@@ -331,6 +355,9 @@ def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/
     elif node == "l-node06":
         queue = "p22"
         nproc = 128
+    elif node == "l-node07":
+        queue = "f24"
+        nproc = 64
     elif node == "node23":
         queue = "tc2"
         nproc = 40
@@ -386,6 +413,8 @@ def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/
             nproc = int(N)
         else:
             nproc = int(N*nproc)
+    elif N<0:
+        sys.exit("Number of processors must be greater or equal to 0.")
     NTHREAD = 2
     nppt = int(nproc/NTHREAD)
     
@@ -403,9 +432,11 @@ def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/
 #SBATCH -e {workingpath}/{jobname}.e
 
 source /home/cbousige/bin/n2p2/env.sh
+source /softs/CompChemPackages/intel/openmpi411Intel/env.sh
+LAMMPS="/home/pmignon/bin/LAMMPS_OMP/lammps-2Aug2023/src/lmp_mpi"
 
 """)
-    else:
+    if full==True or append==True:
         # create a new directory for the job with the jobname and current date and time
         ct = f"{datetime.datetime.now()}".replace(" ", "_")
         mydir = f"{jobname}_{os.path.basename(workingpath)}_{ct}"
@@ -417,7 +448,8 @@ PAT=\"{workingpath}\"
 cp $PAT/input.lmp .
 cp $PAT/*.data .
 cp $PAT/input.nn .
-mpirun -np {nppt} /home/cbousige/bin/lammps-27May2021/src/lmp_mpi -sf omp -pk omp {NTHREAD} < $PAT/input.lmp > $PAT/lammps.out
+cp $PAT/*.db .
+mpirun -np {nppt} $LAMMPS < $PAT/input.lmp > $PAT/lammps.out
 cp -p *.lammpstrj $PAT
 cp -p *log* $PAT
 
@@ -526,9 +558,13 @@ def create_structure(
     shiftY=0,
     a=None,
     island_size=0.,
-    island_shape='circle',
+    island_shape='hexagon',
     island_angle=0.,
-    island_rotate=0.
+    island_rotate=0.,
+    NsolubleB=0,
+    dilate=1.2,
+    toplayer:Atoms=None,
+    randshifttop=0
     ):
     """Create a borophene structure on a substrate
     
@@ -585,12 +621,14 @@ def create_structure(
         Rotation of the borophene island (in degrees) with respect to the substrate
     island_rotate : float
         Rotation of the borophene island (in degrees) with respect to the borophene structure
+    randshifttop: float
+        Add random shift to the top layer of the substrate
     """
     # # # # # # # # # 
     # Create borophene polymorph
     # # # # # # # # #
     if allotrope is not None:
-        if allotrope in predef.keys():
+        if allotrope.lower() in predef.keys():
             nx, ny, listholes = predef[allotrope]
         else:
             sys.exit(f"Unknown allotrope: {allotrope}.")
@@ -614,8 +652,8 @@ def create_structure(
         del struct[listholes]
     # Replicate unit cell
     if size_min is not None and size_min>0:
-        repeatx = int(np.round(size_min/struct.cell[0,0]))
-        repeaty = int(np.round(size_min/struct.cell[1,1]))
+        repeatx = np.max([1, int(np.round(size_min/struct.cell[0,0]))])
+        repeaty = np.max([1, int(np.round(size_min/struct.cell[1,1]))])
     struct = make_supercell(struct, [[repeatx, 0, 0], [0, repeaty, 0], [0, 0, 1]])
 
     structa = struct.cell[0,0]
@@ -822,13 +860,40 @@ def create_structure(
         struct = randstruct.copy()
     # Add supplementary layers of borophene if any
     if Nboro > 1:
-        added = 1
-        Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
-        boro = struct.copy()[Bid]
-        while added < Nboro:
-            boro.positions[:,2] += vdwdist
-            struct = boro + struct
-            added += 1
+        # if no defined toplayer, add same layer on top of the first one
+        if toplayer is None:
+            added = 1
+            Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+            boro = struct.copy()[Bid]
+            while added < Nboro:
+                boro.positions[:,2] += vdwdist
+                if randshifttop>0:
+                    xx, yy = random_vector(dim=2)*randshifttop
+                    boro.positions[:,0] += xx
+                    boro.positions[:,1] += yy
+                struct = boro + struct
+                added += 1
+        # if top layer is defined, make previous layers all the same and the top layer different
+        if toplayer is not None:
+            added = 1
+            Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+            boro = struct.copy()[Bid]
+            while added < Nboro - 1:
+                boro.positions[:,2] += vdwdist
+                if randshifttop>0:
+                    xx, yy = random_vector(dim=2)*randshifttop
+                    boro.positions[:,0] += xx
+                    boro.positions[:,1] += yy
+                struct = boro + struct
+                added += 1
+            # add top layer
+            maxZ = max(struct.positions[:,2])
+            toplayer.positions[:,2] = maxZ + vdwdist
+            if randshifttop>0:
+                xx, yy = random_vector(dim=2)*randshifttop
+                toplayer.positions[:,0] += xx
+                toplayer.positions[:,1] += yy
+            struct += toplayer
     # Sort atoms to have B first
     struct = sort(struct, tags = struct.get_masses())
     # Shift borophene position with respect to substrate
@@ -839,6 +904,8 @@ def create_structure(
     if np.abs(shiftY) > 0:
         struct.positions[Bid,1] += shiftY
         struct.positions[Bid,1] = struct.positions[Bid,1] % structb
+    if NsolubleB > 0:
+        struct = solubilize_boron(struct, NsolubleB, dilate)
     # View structure with ASE
     if glimpse:
         view(struct)
@@ -986,4 +1053,64 @@ def write_lammps(name, atoms,
         fd.close()
 
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def solubilize_boron(struct:Atoms, NsolubleB:int, dilate=1.1, dmin=1.4):
+    """
+    Given a borophene structure, add NsolubleB boron atoms within the metal substrate.
+    Also dilate the substrate along the z axis to accomodate the new atoms.
+    """
+    def find_sites(struct, dmin):
+        Mid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at!='B']
+        a, b, c, alpha, beta, gamma = struct.cell.cellpar()
+        zM = np.array(list(set(struct.positions[Mid,2])))
+        zz = np.diff(zM)/2 + zM[:-1]
+        xgrid = np.arange(0, a, .05)
+        ygrid = np.arange(0, b, .05)
+        grid = np.meshgrid(xgrid, ygrid, zz)
+        grid = np.array(grid).reshape(3,-1).T
+        dists = distance.cdist(grid, struct.positions).min(axis=1)
+        grid = grid[dists > dmin]
+        return(grid)
+    def select_site(struct, dmin):
+        grid = find_sites(struct, dmin)
+        if len(grid)==0:
+            raise ValueError("No site available")
+        return(grid[np.random.choice(len(grid))])
+    Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+    Mid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at!='B']
+    out  = struct.copy()
+    if NsolubleB>0 and len(Mid)>1:
+        # dilate the cell along the z axis
+        out.positions[Mid,2] = out.positions[Mid,2] * dilate
+        out.positions[Bid,2] = struct.positions[Bid,2] + max(out.positions[Mid,2]) - max(struct.positions[Mid,2])
+        # add NsolubleB boron atoms
+        for i in range(NsolubleB):
+            x,y,z = select_site(out, dmin)
+            out += Atoms('B', positions=[[x,y,z]])
+        out = sort(out, tags = out.get_masses())
+    return(out)
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+islands = {
+'island1': create_structure(allotrope='island1', glimpse=False) ,
+'island2': create_structure(allotrope='island2', glimpse=False) ,
+'island3': create_structure(allotrope='island3', glimpse=False) ,
+'island4': create_structure(allotrope='island4', glimpse=False) ,
+'island5': create_structure(allotrope='island5', glimpse=False) ,
+'island6': create_structure(allotrope='island6', glimpse=False) ,
+'island7': create_structure(allotrope='island7', glimpse=False) ,
+'island8': create_structure(allotrope='island8', glimpse=False) ,
+'island9': create_structure(allotrope='island9', glimpse=False) ,
+'island10': create_structure(allotrope='island10', glimpse=False) ,
+'island11': create_structure(allotrope='island11', glimpse=False) ,
+'island12': create_structure(allotrope='island12', glimpse=False)
+}
+"""Dict of predefined borophene islands containing only the B atoms"""
+for island in islands.keys():
+    boron = islands[island].copy()
+    Bid  = [i for i,at in enumerate(boron.get_chemical_symbols()) if at=='B']
+    boron = boron[Bid]
+    islands[island] = boron
