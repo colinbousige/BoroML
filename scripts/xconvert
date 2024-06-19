@@ -18,6 +18,7 @@ import pandas as pd
 from ase.constraints import FixAtoms
 from ase.io.vasp import read_vasp_out
 from ase.io.vasp import read_vasp
+from ase.io.lammpsdata import read_lammps_data
 
 orange = "\033[93m"
 bold   = "\033[1m"
@@ -103,10 +104,18 @@ def main(args):
             struc = [struc[im] for im in image]
             comment = [f'{input} - image {im}' for im in image]
     elif ".data" in input:
-        struc, comments = read_inputdata(input)
-        if not 'all' in image:
-            struc = [struc[im] for im in image]
-            comment = [comments[im] for im in image]
+        n2p2 = 0
+        with open(args.input, 'r') as f:
+            if 'begin' in f.readline():
+                n2p2 = 1
+        if n2p2==1:
+            struc, comments = read_inputdata(input)
+            if not 'all' in image:
+                struc = [struc[im] for im in image]
+                comment = [comments[im] for im in image]
+        else:
+            struc = [read_lammps_data(args.input, style="atomic")]
+            comment = ['']
     elif ".inp" in input:
         struc, comments = read_inputdata(input)
         if not 'all' in image:
@@ -118,8 +127,8 @@ def main(args):
             struc = [struc[im] for im in image]
             comment = [f'{input} - image {im}' for im in image]
     elif "POSCAR" in input:
-        struc = read_vasp(input)
-        comment = ""
+        struc = [read_vasp(input)]
+        comment = [""]
     else:
         raise ValueError(f"""
 {bold}{orange}Unknown input file format!

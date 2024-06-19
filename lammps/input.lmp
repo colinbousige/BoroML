@@ -33,9 +33,8 @@ group      fixedlayer region regfixedlayer
 group      mobile subtract all fixedlayer
 
 #−−−−−−−−−−−−−−−−−−− Potential -−−−−−−−−−−−−−−−−−−−
-pair_style nnp dir ${nnpDir} showew no showewsum 1000 maxew 100 &
-           cflength 1.8897261328 cfenergy 0.0367493254 emap "1:B,2:Ag"
-pair_coeff * * ${nnpCutoff}
+pair_style hdnnp ${nnpCutoff} dir ${nnpDir} showew no showewsum 1000 maxew 100 cflength 1.8897261328 cfenergy 0.0367493254
+pair_coeff * * B Ag
 
 #−−−−−−−−−−−−−−−−−−−− Output −−−−−−−−−−−−−−−−−−−−−−
 compute       mytemp mobile temp # the temperature is computed on moving atoms only
@@ -44,43 +43,42 @@ thermo_modify norm yes # extensive quantities will be normalized per atom
 thermo        ${thermoprint}
 compute       pe all pe/atom
 
-
 #−−−−−−−−−−−−−−−−−−−− MD Run ---−−−−−−−−−−−−−−−−−−−
 # Create initial velocities
 velocity   mobile create ${T0} 123456
 
 #------- Thermalization 1 -------
-dump           dmpequil1 all custom 100 ${dumpname}_equil1.lammpstrj id element x y z
-dump_modify    dmpequil1 flush yes sort id element B Ag
 timestep    0.0001
+dump        dmpequil1 all custom 100 ${dumpname}_equil1.lammpstrj id element x y z
+dump_modify dmpequil1 flush yes sort id element B Ag
 fix         mdequil1 mobile nvt temp ${T0} ${T0} $(1.0*dt)
 run         25000
 unfix       mdequil1
 undump      dmpequil1
 
 #------- Thermalization 2 -------
-dump           dmpequil2 all custom 100 ${dumpname}_equil2.lammpstrj id element x y z
-dump_modify    dmpequil2 flush yes sort id element B Ag
 timestep    0.0001
+dump        dmpequil2 all custom 100 ${dumpname}_equil2.lammpstrj id element x y z
+dump_modify dmpequil2 flush yes sort id element B Ag
 fix         mdequil2 mobile nvt temp ${T0} ${T0} $(10.0*dt)
 run         25000
 unfix       mdequil2
 undump      dmpequil2
 
 #------- Thermalization 3 -------
-dump           dmpequil3 all custom 100 ${dumpname}_equil3.lammpstrj id element x y z
-dump_modify    dmpequil3 flush yes sort id element B Ag
 timestep    0.0001
+dump        dmpequil3 all custom 100 ${dumpname}_equil3.lammpstrj id element x y z
+dump_modify dmpequil3 flush yes sort id element B Ag
 fix         mdequil3 mobile nvt temp ${T0} ${T0} $(100.0*dt)
 run         50000
 unfix       mdequil3
 undump      dmpequil3
 
 #------- Production -------
-dump           dmpprod all custom ${dumptime} ${dumpname}_prod.lammpstrj id element x y z c_pe
-dump_modify    dmpprod flush yes sort id element B Ag
 reset_timestep 0
 timestep    0.0001
+dump        dmpprod all custom ${dumptime} ${dumpname}_prod.lammpstrj id element x y z c_pe
+dump_modify dmpprod flush yes sort id element B Ag
 fix         mdprod mobile nve
 run         100000
 unfix       mdprod

@@ -4,15 +4,18 @@ import subprocess
 from . import Cluster
 
 # Path to VASP executable
-vaspdir = "/softs/CompChemPackages/VASP6/OpenMpiIntelLib"
+vasp_dir = "/softs/CompChemPackages/VASP6/OpenMpiIntelLib"
 # Path to scratch directory on the cluster
 clusterwdir = "/scratch/$USER/vasp"
 # Where to find the VASP input files: INCAR, POTCAR, KPOINTS
+# For POTCAR files, should be named POTCAR_{atoms} where {atoms} is the atom types in the system ("BAg" or "BAu")
 inputs_VASP = "$HOME/Boro_ML/bin/inputs_VASP"
 # Where to find the adaptive_learning scripts and convert-VASP_OUTCAR_AU.py from n2p2
 mybin = "$HOME/Boro_ML/bin"
-# Base path where n2p2 is installed, as well as the GSL library and OpenMPI
-basepath = "$HOME/bin"
+# Path where n2p2 is installed, as well as the GSL library and OpenMPI environment scripts to source
+n2p2_dir = "$HOME/bin/n2p2"
+openmpi_env = "$HOME/bin/openmpi401/openmpi4.sh"
+gsl_env = "$HOME/bin/gsl/gsl.sh"
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -76,7 +79,7 @@ class SlurmJob:
     """
     
     def __init__(self, type: str, cluster: Cluster, path='.', Nepoch=30, atoms = "BAg",
-                 jobname='job', numbers=[], launch=False, maxtries=20, wait=3):
+                 jobname='job', numbers=[], launch=False, maxtries=20, wait=3, Kpoints='7 7 1', ENCUT=700):
         if not type in ['vasp', 'nnp-train', 'nnp-scaling', 'nnp-all']:
             raise TypeError("type must be one of 'vasp', 'nnp-train', 'nnp-scaling', or 'nnp-all'.")
         self.node      = ''
@@ -98,8 +101,6 @@ class SlurmJob:
         """Once submitted, ID of the job"""
         self.running   = False
         """Is the job running or not?"""
-        self.n2p2dir   = 'n2p2'
-        """Directory name for the `n2p2` program."""
         self.maxtries  = maxtries
         """Maximum number of submission tries for jobs before giving up"""
         self.cluster   = cluster
@@ -110,6 +111,10 @@ class SlurmJob:
         """Atom types in the system"""
         self.wait      = wait
         """Time to wait between submission tries"""
+        self.Kpoints   = Kpoints
+        """Kpoints for VASP calculations"""
+        self.ENCUT     = ENCUT
+        """Energy cutoff for VASP calculations"""
         if launch:
             """Launch the job upon creation or not?"""
             self.assign_node()
@@ -136,7 +141,8 @@ running   = {self.is_running()}"""
     def write_header(self):
         """Write job header of job script"""
         if self.type == "vasp":
-            add = f"""VASPDIR={vaspdir}
+            kpoints=f"K-Points\\n0\\nMonkhorst Park\\n{self.Kpoints}\\n0 0 0\\n"
+            add = f"""VASPDIR={vasp_dir}
 WDIR={clusterwdir}-{self.jobname}
 source $VASPDIR/env.sh
 
@@ -144,10 +150,11 @@ mkdir -p $WDIR || exit 1
 cd $WDIR
 cp {inputs_VASP}/INCAR .
 cp {inputs_VASP}/POTCAR_{self.atoms} ./POTCAR
-cp {inputs_VASP}/KPOINTS .
+echo -e \"{kpoints}\" > ./KPOINTS 
+sed -i "s/ENCUT=/ENCUT={self.ENCUT}  \!/g" INCAR
 """
         if "nnp" in self.type:
-            add = f"""export N2P2DIR={basepath}/{self.n2p2dir}
+            add = f"""export N2P2DIR={n2p2_dir}
 export LD_LIBRARY_PATH=$N2P2DIR/lib:$LD_LIBRARY_PATH
 export PATH={mybin}:$N2P2DIR/bin:$PATH
 """
@@ -163,8 +170,8 @@ export PATH={mybin}:$N2P2DIR/bin:$PATH
 #SBATCH -e {self.path}/{self.jobname}.e
 
 export OMP_NUM_THREADS=1
-source {basepath}/openmpi401/openmpi4.sh
-source {basepath}/gsl/gsl.sh
+source {openmpi_env}
+source {gsl_env}
 MPIBIN=mpirun
 PAT={self.path}
 {add}
@@ -189,6 +196,12 @@ cd $PAT
 $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
 """
         if self.type == "nnp-scaling":
+            if {self.atoms} == 'BAg':
+                writecopy = f'''cp $PAT/train/weights.047.{self.Nepoch:06d}.out $PAT/train/weights.047.data
+cp $PAT/train/weights.047.data $PAT/predict/'''
+            if {self.atoms} == 'BAu':
+                writecopy = f'''cp $PAT/train/weights.079.{self.Nepoch:06d}.out $PAT/train/weights.079.data
+cp $PAT/train/weights.079.data $PAT/predict/'''
             out = f"""
 cd $PAT
 
@@ -203,10 +216,9 @@ $MPIBIN -np 4 $N2P2DIR/bin/nnp-scaling 5
 rm -f sf*.histo
 $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
 
-cp $PAT/train/weights.047.{self.Nepoch:06d}.out $PAT/train/weights.047.data
 cp $PAT/train/weights.005.{self.Nepoch:06d}.out $PAT/train/weights.005.data
 cp $PAT/train/weights.005.data $PAT/predict/
-cp $PAT/train/weights.047.data $PAT/predict/
+{writecopy}
 cp $PAT/train/input.nn $PAT/predict/
 cp $PAT/train/scaling.data $PAT/predict/
 
@@ -297,11 +309,10 @@ $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
         else:
             self.node  = self.cluster.preferred_node
             self.nproc = cluster_state[cluster_state.NodeName.isin([self.node])].CPUTot.tolist()[0]
-            self.nproc = int(self.nproc/2)
             self.queue = cluster_state[cluster_state.NodeName.isin([self.node])].Partitions.tolist()[0]
-        if 'l-node' in self.node:
-            NprocMax = cluster_state[cluster_state.NodeName.isin([self.node])].CPUTot.tolist()[0]
-            self.nproc = int(NprocMax/2) if self.nproc>NprocMax/2 else self.nproc
+        # if 'l-node' in self.node:
+        #     NprocMax = cluster_state[cluster_state.NodeName.isin([self.node])].CPUTot.tolist()[0]
+        #     self.nproc = int(NprocMax/2) if self.nproc>NprocMax/2 else self.nproc
         if self.type == 'nnp-scaling':
             self.nproc = 4
 

@@ -34,26 +34,29 @@ bold   = "\033[1m"
 normal = "\033[0m"
 
 def main(args):
-    nx          = args.nx
-    ny          = args.ny
-    substrate   = args.substrate
-    orientation = args.orientation
-    nz          = args.nz
-    a           = args.a
-    D           = args.D
-    vdw         = args.vdw
-    Nboro       = args.Nboro
-    allotrope   = args.allotrope
-    size_min    = args.size_min
-    vac         = args.vac
-    out         = args.out
-    fixed       = args.fixed
-    angle       = args.angle
-    rand        = np.abs(args.rand)
-    island_size = args.island_size
-    island_shape = args.island_shape
-    island_angle = args.island_angle
+    nx            = args.nx
+    ny            = args.ny
+    substrate     = args.substrate
+    orientation   = args.orientation
+    nz            = args.nz
+    a             = args.a
+    D             = args.D
+    vdw           = args.vdw
+    Nboro         = args.Nboro
+    allotrope     = args.allotrope
+    size_min      = args.size_min
+    vac           = args.vac
+    out           = args.out
+    fixed         = args.fixed
+    angle         = args.angle
+    rand          = np.abs(args.rand)
+    island_size   = args.island_size
+    island_shape  = args.island_shape
+    island_angle  = args.island_angle
     island_rotate = args.island_rotate
+    NsoluB        = args.NsoluB
+    soluDilate    = args.soluDilate
+    toplayer      = args.toplayer
     
     if island_size > 0 and island_shape not in ['circle', 'square', 'triangle', 'hexagon']:
         raise ValueError(f"\n{bold}{orange}Unknown island shape: {island_shape}{normal}\n")
@@ -89,7 +92,10 @@ def main(args):
             island_size = island_size,
             island_shape= island_shape,
             island_angle= island_angle,
-            island_rotate= island_rotate
+            island_rotate= island_rotate,
+            NsolubleB   = NsoluB,
+            dilate      = soluDilate,
+            toplayer    = islands[toplayer] if toplayer.lower() in islands.keys() else None
         )
     nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -107,7 +113,8 @@ def main(args):
             Nboro       = Nboro,
             glimpse     = False,
             a           = celpar,
-            angle       = angle
+            angle       = angle,
+            toplayer    = islands[toplayer] if toplayer.lower() in islands.keys() else None
         )
     unit_nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -142,7 +149,12 @@ def main(args):
     nx = int(np.round(nometal.get_cell()[0][0]/unit_nometal.get_cell()[0][0],1))
     ny = int(np.round(nometal.get_cell()[1][1]/unit_nometal.get_cell()[1][1],1))
     if fixed is not None:
-        c = FixAtoms(mask=struc.positions[:,2] <= 2.35*(fixed-1)+1.2)
+        Mid  = [i for i,at in enumerate(struc.get_chemical_symbols()) if at!='B']
+        zmax = list(set(struc.positions[Mid,2]))[fixed-1]
+        # fix metal atoms with z<zmax
+        mask = [i for i,at in enumerate(struc.get_chemical_symbols()) if at!='B']
+        mask = [i for i in mask if struc.positions[i,2] <= zmax+.1]
+        c = FixAtoms(indices = mask)
         struc.set_constraint(c)
         struc = sort(struc, tags = struc.get_masses())
     if out=='vasp':
@@ -292,6 +304,18 @@ def get_parser():
                         action  = "store_true",
                         default = False, 
                         help    = "Show the structure with ASE.")
+    parser.add_argument('--NsoluB', '-NsoluB',
+                        help    = "Add randomly solubilized B atoms.",
+                        type    = int,
+                        default = 0)
+    parser.add_argument('--soluDilate', '-soluDilate',
+                        help    = "Dilatation along z of the metal structure if NsoluB > 0.",
+                        type    = int,
+                        default = 1.1)
+    parser.add_argument('--toplayer', '-top',
+                        help    = f"Top layer of the substrate to consider. If not provided, all layers are the same. Must be one of {['None']+[k for k in islands.keys()]}",
+                        type    = str,
+                        default = None)
 
     parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
     return parser

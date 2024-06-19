@@ -11,7 +11,7 @@ import matplotlib.colors as mcolors
 from ase.io import write
 from functools import reduce
 from itertools import combinations
-from .functions import read_inputdata, write_inputdata
+from .functions import read_inputdata, write_inputdata, print_success_message
 from .SlurmJob import SlurmJob
 from .Cluster import Cluster
 
@@ -47,6 +47,8 @@ class AdaptiveTraining:
         Compute with VASP all structures in `EW.data` and add them to the dataset. This `EW.data` file is created with the script `xLAMMPStoNNP`.
     `compare_energies(self)`
         Compare energies computed by NNP1 and NNP2.
+    `compare_forces(self)`
+        Compare forces computed by NNP1 and NNP2.
     `copy_weights(self)`
         Copy weight files from training to predict folder, as well as scaling.data and input.nn
     `do_NNPs(self)`
@@ -101,7 +103,10 @@ class AdaptiveTraining:
                  clusterVASP = Cluster(),
                  vasp_Nnodes = 4,
                  Nepoch: int = None,
-                 atoms       = "BAg"
+                 atoms       = "BAg",
+                 minimize    = "energy",
+                 Kpoints     = "7 7 1",
+                 ENCUT       = 700
                  ):
         self.path = path
         """Working directory"""
@@ -121,6 +126,9 @@ class AdaptiveTraining:
         """Numbers of combinations of NNPs: automatic determination from self.Nnnp"""
         self.atoms = atoms
         """Atom types in the system"""
+        self.minimize = minimize
+        """During the adaptive training, the quantity to compare between NNP1 and NNP2. 
+        If "energy", the energy difference is minimized. If "force", the force difference is minimized."""
         self.initialize()
         if Nepoch is None:
             self.Nepoch  = self.get_epochs()
@@ -138,6 +146,10 @@ class AdaptiveTraining:
         """Total number of iterations to perform."""
         self.stock = self.read_stock()
         """Dict of {id, comment, structures} of stock structures."""
+        self.Kpoints   = Kpoints
+        """Kpoints for VASP calculations"""
+        self.ENCUT     = ENCUT
+        """Energy cutoff for VASP calculations"""
         print("""─────────────────────────────────────────────────────────────
 *   Adaptive construction of the dataset for NNP training   *
 ─────────────────────────────────────────────────────────────""", flush=True)
@@ -157,6 +169,8 @@ class AdaptiveTraining:
 ├▶︎ Nadd/iteration       = {self.Nadd}
 ├▶︎ Nepoch               = {self.Nepoch}
 ├▶︎ Nnodes for VASP      = {self.vasp_Nnodes}
+├▶︎ Kpoints for VASP     = {self.Kpoints}
+├▶︎ ENCUT for VASP       = {self.ENCUT}
 └▶︎ Number of iterations = {self.Niter}
 ─────────────────────────────────────────────────────────────
 
@@ -203,21 +217,33 @@ class AdaptiveTraining:
                 f.write("###########################################\n")
                 f.write("#  1 : N                  : Number of structures in dataset\n")
                 RMSE, dEmean, dEstd = [], [], []
+                j = 1
                 for i in range(1,self.Nnnp+1):
-                    f.write(f"# {i+1:2d} : RMSE{i} (meV/at)     : RMSE from training NNP{i}\n")
-                    RMSE += [f'RMSE{i}']
+                    f.write(f"# {j:2d} : RMSE_E{i} (meV/at)   : energies RMSE from training NNP{i}\n")
+                    j += 1
+                    f.write(f"# {j:2d} : RMSE_F{i} (meV/Å)    : forces RMSE from training NNP{i}\n")
+                    j += 1
+                    RMSE += [(f'RMSE_E{i}', f'RMSE_F{i}')]
                 k=1
                 for i,j in combinations(range(1, self.Nnnp+1), 2):
-                    f.write(f"# {self.Nnnp+1+k:2d} : dEmean{i}-{j} (meV/at) : mean(Ennp{i}-Ennp{j}) for all structures in stock\n")
-                    dEmean += [f'dEmean{i}-{j}']
+                    if self.minimize == "energy":
+                        f.write(f"# {self.Nnnp+j+k:2d} : dEmean{i}-{j} (meV/at) : mean(Ennp{i}-Ennp{j}) for all structures in stock\n")
+                        dEmean += [f'dEmean{i}-{j}']
+                    if self.minimize == "forces":
+                        f.write(f"# {self.Nnnp+j+k:2d} : dFmean{i}-{j} (meV/Å)  : mean(Fnnp{i}-Fnnp{j}) for all structures in stock\n")
+                        dEmean += [f'dFmean{i}-{j}']
                     k += 1
                 k=1
                 for i,j in combinations(range(1, self.Nnnp+1), 2):
-                    f.write(f"# {self.Nnnp+Ncomb+1+k:2d} : dEstd{i}-{j} (meV/at)  : std(Ennp{i}-Ennp{j}) for all structures in stock\n")
-                    dEstd += [f'dEstd{i}-{j}']
+                    if self.minimize == "energy":
+                        f.write(f"# {self.Nnnp+Ncomb+1+k:2d} : dEstd{i}-{j} (meV/at)  : std(Ennp{i}-Ennp{j}) for all structures in stock\n")
+                        dEstd += [f'dEstd{i}-{j}']
+                    if self.minimize == "forces":
+                        f.write(f"# {self.Nnnp+Ncomb+1+k:2d} : dFstd{i}-{j} (meV/at)  : std(Fnnp{i}-Fnnp{j}) for all structures in stock\n")
+                        dEstd += [f'dFstd{i}-{j}']
                     k += 1
                 f.write("###########################################\n")
-                f.write(f"N,{','.join(RMSE)},{','.join(dEmean)},{','.join(dEstd)}\n")
+                f.write(f"""N,{','.join(f"{r[0]},{r[1]}" for r in RMSE)},{','.join(dEmean)},{','.join(dEstd)}\n""")
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -226,12 +252,12 @@ class AdaptiveTraining:
         Get number of structures in /NNP1/train/input.data. If stock=True, rather count structures in /NNP1/predict/input.data. If copy=True, save a copy of input.data in `inputs/input_N.data`
         """
         if stock == False:
-            Nstruct=subprocess.run(f"grep 'begin' {self.path}/NNP1/train/input.data | wc -l", 
+            Nstruct=subprocess.run(f"grep -c 'begin' {self.path}/NNP1/train/input.data", 
                                 shell=True, capture_output=True).stdout.decode('utf-8').split('\n')[0]
             if copy:
                 subprocess.run(f"cp {self.path}/NNP1/train/input.data {self.path}/inputs/input_{Nstruct}.data", shell=True)
         else:
-            Nstruct=subprocess.run(f"grep 'begin' {self.path}/NNP1/predict/input.data | wc -l", 
+            Nstruct=subprocess.run(f"grep -c 'begin' {self.path}/NNP1/predict/input.data", 
                                 shell=True, capture_output=True).stdout.decode('utf-8').split('\n')[0]
         return(int(Nstruct))
 
@@ -263,13 +289,11 @@ class AdaptiveTraining:
         """
         best = []
         rmse = []
-        # print(f"", flush=True)
         for i in range(1, self.Nnnp+1):
             data = pd.read_table(f'{self.path}/NNP{i}/train/learning-curve.out', comment='#', sep=r'\s{2,}', 
-                            engine='python', usecols=[0,1], names=['epoch','RMSE'], header=None)
+                            engine='python', usecols=[0,1,9], names=['epoch','RMSE_E','RMSE_F'], header=None)
             best += [data.RMSE.argmin()]
-            rmse += [data.RMSE.min()*1000*27.21138469]
-            # print(f"""NNP{i}/train: BestEpoch = {best[i-1]} – RMSE = {rmse[i-1]:.3f}""", flush=True)
+            rmse += [(data.RMSE_E.min()*1000*27.21138469, data.RMSE_F[data.RMSE.argmin()]*27211.38469/0.529177)]
         print(f"", flush=True)
         return(best, rmse)
     
@@ -282,8 +306,8 @@ class AdaptiveTraining:
         rmse = []
         for i in range(1, self.Nnnp+1):
             data = pd.read_table(f'{self.path}/NNP{i}/train/learning-curve.out', comment='#', sep=r'\s{2,}', 
-                            engine='python', usecols=[0,1], names=['epoch','RMSE'], header=None)
-            rmse += [data.RMSE.to_list()[-1]*1000*27.21138469]
+                            engine='python', usecols=[0,1,9], names=['epoch','RMSE_E','RMSE_F'], header=None)
+            rmse += [(data.RMSE_E.to_list()[-1]*1000*27.21138469, data.RMSE_F.to_list()[-1]*27211.38469/0.529177)]
         return(rmse)
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -340,22 +364,56 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def plot_RMSE_training(self, i=1, save=True):
+    def plot_RMSE_training(self, i:int=1, save:bool=True, forces:bool=False):
+
         """
         Plot RMSE of training of NNPs
+        Parameters:
+        -----------
+        i: int, Adaptive learning Iteration 
+        save: bool, save the learning curves of the of the NNP's through the training (single Adaptive learning iteration)
+        forces: bool, if True beside the RMSE of energies, the RMSE of forces for the NNP's is also recorded.
+        Return:
+        ------
+        fig : matplotlib.figure
         """
-        fig, ax = plt.subplots()
-        ax.set_title(f"Training NNPs – Step {i}", fontweight="bold")
-        ax.set_xlabel('Epoch')
-        ax.set_ylabel('Energies RMSE [meV/at]')
-        ax.grid()
-        ax.set_ylim([0, 200])
+
+        if self.minimize == "force":
+            forces = True
+
+        ncols = 2 if forces else 1
+        usecols = [0, 1, 9] if forces else [0,1] 
+        names = ['epoch','RMSE_E', 'RMSE_F'] if forces else ['epoch','RMSE_E']
+        fig, ax = plt.subplots(ncols=ncols, figsize=(12,6))
+        fig.suptitle(f"Training NNPs – Step {i}", fontweight="bold")
+        fig.supxlabel('Epochs')
+	
+        if ncols == 2:
+            ax[0].set_ylabel('Energies RMSE [meV/at]')
+            ax[1].set_ylabel('Forces RMSE [meV/Å]')
+            for j in [0, 1]:
+                ax[j].grid()
+        else:
+            ax.set_ylabel('Energies RMSE [meV/at]')
+            ax.grid()
+            ax.set_ylim([0, 200])
+
         for j in range(1, self.Nnnp+1):
             data = pd.read_table(f'{self.path}/NNP{j}/train/learning-curve.out', 
-                                comment='#', sep=r'\s{2,}', engine='python', 
-                                usecols=[0,1], names=['epoch','RMSE'], header=None)
-            plt.plot(data.epoch, data.RMSE*27.21138469*1000, label=f"NNP{j}")
-        plt.legend(loc='upper right')
+                                comment='#', sep=r'\s{2,}', engine='python',
+                                usecols=usecols, names=names, header=None) 
+            # remove first epoch to zoom in on the graph
+            data = data.iloc[1:]
+            if forces:
+                ax[0].plot(data.epoch, data.RMSE_E*27.21138469*1000, label=f"NNP{j}")
+                ax[1].plot(data.epoch, data.RMSE_F*27211.38469/0.529177, label=f"NNP{j}")
+            else:
+                ax.plot(data.epoch, data.RMSE_E*27.21138469*1000, label=f"NNP{j}")
+        
+        Line, Label = ax[0].get_legend_handles_labels() if forces else ax.get_legend_handles_labels()
+
+        fig.legend(Line, Label, loc='upper right')
+        
         if save:
             plt.savefig(f"{self.path}/plots/NNPtrainings_{i:05d}.jpg", dpi=300)
             plt.cla()
@@ -364,29 +422,30 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def plot_convergence(self, save=True):
+    def plot_convergence(self, save=True, type="energy"):
         """
         Plot convergence of adaptative training
         """
+        typ = 'E' if type == "energy" else 'F'
         data = pd.read_csv(f'{self.path}/training.csv', comment='#')
         fig, (ax1,ax2) = plt.subplots(1,2, tight_layout=True, figsize=(8, 4))
         fig.suptitle(f"Convergence plot", fontweight="bold")
-        ax1.set_title("$|\Delta E|$", fontweight="bold")
+        ax1.set_title(f"$|\Delta {typ}|$", fontweight="bold")
         ax1.set_xlabel('Dataset Size')
-        ax1.set_ylabel('$|\Delta E|$ [meV/at]')
+        ax1.set_ylabel(f'$|\Delta {typ}|$ [meV/at]')
         ax1.grid()
-        ax1.set_ylim([0, max(data['dEmean1-2'])])
+        ax1.set_ylim([0, max(data[f'd{typ}mean1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            ax1.plot(data.N, data[f'dEmean{i}-{j}'], 
+            ax1.plot(data.N, data[f'd{typ}mean{i}-{j}'], 
                      label=f'$NNP{i}-NNP{j}$')
 
-        ax2.set_title("$std(\Delta E)$", fontweight="bold")
+        ax2.set_title(f"$std(\Delta {typ})$", fontweight="bold")
         ax2.set_xlabel('Dataset Size')
-        ax2.set_ylabel('$std(\Delta E)$ [meV/at]')
+        ax2.set_ylabel(f'$std(\Delta {typ})$ [meV/at]')
         ax2.grid()
-        ax2.set_ylim([0, 5*min(data['dEstd1-2'])])
+        ax2.set_ylim([0, 5*min(data[f'd{typ}std1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            ax2.plot(data.N, data[f'dEstd{i}-{j}'], 
+            ax2.plot(data.N, data[f'd{typ}std{i}-{j}'], 
                      label=f'$NNP{i}-NNP{j}$')
 
         Line, Label = ax1.get_legend_handles_labels()
@@ -406,7 +465,7 @@ class AdaptiveTraining:
         """
         Write N, RMSE, dEmean, dEstd to `training.csv`
         """
-        rmse  = ','.join(f"{r:.6e}" for r in RMSE)
+        rmse  = ','.join(f"{r[0]:.6e},{r[1]:.6e}" for r in RMSE)
         de    = ','.join(f"{r:.6e}" for r in dEmean)
         destd = ','.join(f"{r:.6e}" for r in dEstd)
         with open(f"{self.path}/training.csv", 'a') as f:
@@ -414,7 +473,7 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def plot_distrib(self, data, i=0, save=True):
+    def plot_distrib(self, data, i=0, save=True, type="energy"):
         """
         Plot histogram of E_{NNP2} - E_{NNP1} to `plots/histogram_{i:05d}.jpg`
         """
@@ -424,16 +483,20 @@ class AdaptiveTraining:
         if Tot % Cols != 0:
             Rows += 1
         # # # # # 
-
+        typ = 'E' if type == "energy" else 'F'
+        
         fig,axes = plt.subplots(Rows,Cols, tight_layout=True, sharex=True, sharey=True, figsize=(8, Tot*2.5))
         fig.suptitle(f'Iteration {i}')
         l = 0
         if Tot == 1:
             axes = [axes]
         for (k,j),ax in zip(combinations(range(1, self.Nnnp+1), 2), axes):
-            ax.set_xlabel('$E_{NNP_i} - E_{NNP_j}$ [meV/atom]')
-            x = data[f'Ennp{k}'] - data[f'Ennp{j}']
-            ax.hist(x, 50, facecolor=list(mcolors.TABLEAU_COLORS)[l], rwidth=.98, log=True, label=f'$E_{{NNP{k}}} - E_{{NNP{j}}}$')
+            if type == "energy":
+                ax.set_xlabel(f'${typ}_{{NNP_i}} - {typ}_{{NNP_j}}$ [meV/atom]')
+            else:
+                ax.set_xlabel(f'${typ}_{{NNP_i}} - {typ}_{{NNP_j}}$ [meV/Å]')
+            x = data[f'{typ}nnp{k}'] - data[f'{typ}nnp{j}']
+            ax.hist(x, 50, facecolor=list(mcolors.TABLEAU_COLORS)[l], rwidth=.98, log=True, label=f'${typ}_{{NNP{k}}} - {typ}_{{NNP{j}}}$')
             ax.set_ylabel('Count')
             ax.grid()
             ax.legend(loc='upper right')
@@ -479,16 +542,22 @@ class AdaptiveTraining:
         # # # # # # # # 
         fE = [f"{self.path}/NNP{i+1}/predict/trainpoints.000000.out" for i in range(self.Nnnp)]
         finput = [f"{self.path}/NNP{i+1}/predict/input.nn" for i in range(self.Nnnp)]
-        data = []
-        for i in range(self.Nnnp):
+        # read energies for NNP1
+        colnames=["index",f"Ennp1"] 
+        data = pd.read_table(fE[0], comment='#', sep=r"\s{2,}", 
+                            usecols=[0,2], engine="python", 
+                            names=colnames, header=None)
+        mean_energy, conv_energy = read_input(finput[0])
+        data[f"Ennp1"] = denorm(data[f"Ennp1"], mean_energy, conv_energy)
+        # append Ennp{i} for all other NNPs
+        for i in range(1, self.Nnnp):
             colnames=["index",f"Ennp{i+1}"] 
-            d = pd.read_table(fE[i], comment='#', sep=r"\s{2,}", usecols=[0,2], 
-                    engine="python", names=colnames, header=None)
-            data += [d]
+            d = pd.read_table(fE[i], comment='#', sep=r"\s{2,}", 
+                              usecols=[0,2], engine="python", 
+                              names=colnames, header = None)
             mean_energy, conv_energy = read_input(finput[i])
             d[f"Ennp{i+1}"] = denorm(d[f"Ennp{i+1}"], mean_energy, conv_energy)
-        # Merge tables and convert to meV/atom
-        data = reduce(lambda df1,df2: pd.merge(df1, df2, on = 'index'), data)
+            data[f"Ennp{i+1}"] = d[f"Ennp{i+1}"]
         # Compute Energy Differences in meV/atom
         for i,j in combinations(range(1, self.Nnnp+1), 2):
             data[f'dif{i}-{j}'] = np.abs(data[f"Ennp{i}"] - data[f"Ennp{j}"])
@@ -499,6 +568,62 @@ class AdaptiveTraining:
             Esorted = data.sort_values(by=[f'dif{i}-{j}'], ascending=False)
             numbers += [np.array(Esorted.index)]
         return(dEmean, dEstd, numbers, data)
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def compare_forces(self):
+        """
+        Compare forces computed by all NNPs. Returns [dFmean], [dFstd], [numbers] on all combinations, 
+        where `numbers` is the indexes of the structures (in input.data) sorted in decreasing order of forces differences per combination of NNPs.
+        """
+        def read_input(filename: str):
+            """
+            Read normalisation constants from input.nn
+            """
+            with open(filename, 'r') as f:
+                lines = f.read().splitlines()
+            for line in lines:
+                if "conv_energy" in line:
+                    conv_energy = float(line.split()[1])
+                if "conv_length" in line:
+                    conv_length = float(line.split()[1])
+            return(conv_energy, conv_length)
+        # # # # # # # # 
+        def denormF(F: float, conv_energy: float, conv_length: float)-> float:
+            """
+            Return de-normalized Forces in eV/Å
+            """
+            return(F*conv_length/conv_energy*27211.38469/0.529177) # further check meV/A
+        # # # # # # # # 
+        fF = [f"{self.path}/NNP{i+1}/predict/trainforces.000000.out" for i in range(self.Nnnp)]
+        finput = [f"{self.path}/NNP{i+1}/predict/input.nn" for i in range(self.Nnnp)]
+        colnames  = ["index_s"]
+        colnames += [f"Fnnp{i}" for i in range(1,self.Nnnp+1)]                
+        data = pd.DataFrame({c : [] for c in colnames}) # empty DataFrame
+        # append Fnnp{i} for all other NNPs
+        for i in range(self.Nnnp):
+            colnames=["index_s", "index_a", f"Fnnp{i+1}"]
+            d = pd.read_csv(fF[i], delim_whitespace=True, usecols=[0,1,3],
+                            comment="#", skiprows=13, names=colnames)
+            d.sort_values(by=['index_s', 'index_a'], inplace=True)
+            conv_energy, conv_length = read_input(finput[i])
+            d[f"Fnnp{i+1}"] = denormF(d[f"Fnnp{i+1}"], conv_energy, conv_length)
+            data[f"Fnnp{i+1}"] = d[f"Fnnp{i+1}"].to_numpy()                     # Here I append the columns by np.ndarray objects to maintain the index_s order
+        data["index_s"] = d[f"index_s"].to_numpy() # take the index from the last DataFrame they are the same and in increasing order    
+        # Compute Forces Differences in meV/Å
+        for i,j in combinations(range(1, self.Nnnp+1), 2):
+            data[f'dif{i}-{j}'] = np.abs(data[f"Fnnp{i}"] - data[f"Fnnp{j}"])
+        # Drop Fnnp{i} columns
+        #data = data.drop(columns=[f'Fnnp{i}' for i in range(1, self.Nnnp+1)]).drop(columns=['index_a']) # we need them for plot_distribution
+        # group data by index_s and compute mean of all dif{i}-{j} columns
+        datagrouped = data.groupby('index_s').mean()
+        dFmean, dFstd, numbers = [], [], []
+        for i,j in combinations(range(1, self.Nnnp+1), 2):
+            dFmean  += [np.mean(datagrouped[f'dif{i}-{j}'])]
+            dFstd   += [np.std(datagrouped[f'dif{i}-{j}'])]
+            Fsorted = datagrouped.sort_values(by=[f'dif{i}-{j}'], ascending=False)
+            numbers += [np.array(Fsorted.index)]
+        return(dFmean, dFstd, numbers, datagrouped)
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -744,6 +869,8 @@ class AdaptiveTraining:
                     cluster = self.clusterVASP,
                     jobname = f"vasp{i+1}", 
                     numbers = todo[int(i*len(todo)/Nnodes):int((i+1)*len(todo)/Nnodes)],
+                    Kpoints = self.Kpoints,
+                    ENCUT   = self.ENCUT,
                     launch  = True)]
             while any([v.is_running() for v in vasp]) == True:
                 time.sleep(10)
@@ -780,6 +907,8 @@ class AdaptiveTraining:
                     cluster = self.clusterVASP,
                     jobname = f"vasp{i+1}", 
                     numbers = todo[int(i*len(todo)/Nnodes):int((i+1)*len(todo)/Nnodes)],
+                    Kpoints = self.Kpoints,
+                    ENCUT   = self.ENCUT,
                     launch  = True)]
             while any([v.is_running() for v in vasp]) == True:
                 time.sleep(10)
@@ -806,3 +935,61 @@ class AdaptiveTraining:
                 out = line.split(' ')
         self.Nepoch = int([o for o in out if o][1])
         return(int([o for o in out if o][1]))
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    def run(self):
+        """
+        Run the adaptive training
+        """
+        for i in range(1, self.Niter+1):
+            Nstruct = self.get_Nstruct(copy=True)
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+            print(f"""├─────▶︎ ITERATION {i} / {self.Niter} ◀︎──────
+│
+├─▶︎ {Nstruct} structures in input.data
+├─▶︎ {self.get_Nstruct(stock=True)} structures in stock
+│""", flush=True)
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+            print(f"├───▶︎ Training {self.Nnnp} NNPs\n│", flush=True)
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+            # Perform the, scaling, training and prediction of both NNPs and wait until it's done
+            # self.do_NNPs() # sometimes fails for whatever reason...
+            self.do_scaling()
+            self.do_training()
+            self.do_predict()
+            # Get RMSEs
+            RMSE = self.get_last_rmse()
+            # Compare energies/forces
+            if self.minimize == "energy":
+                dmean, dstd, numbers, quantities = self.compare_energies()
+            elif self.minimize == "forces":
+                dmean, dstd, numbers, quantities = self.compare_forces()
+            else:
+                print("\n\nERROR: `minimize` must be either 'energy' or 'forces'\n\nExiting...\n\n")
+                exit(1)
+            # Output to log
+            self.write2log(Nstruct, RMSE, dmean, dstd)
+            # Make plots
+            self.plot_RMSE_training(i, forces=True)
+            self.plot_distrib(quantities, i, type = self.minimize)
+            if i > 1:
+                self.plot_convergence(type = self.minimize)
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+            print(f"│\n├───▶︎ Making VASP calculations on the {self.Nadd} structures with largest E difference\n│", flush=True)
+            # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+            # Compute the self.Nadd first structures for each combination of NNP
+            nums = np.unique(np.concatenate([nu[:self.Nadd] for nu in numbers]).ravel())
+            indexes = self.get_POSCARs(nums)
+            self.do_vasp(indexes)
+            # Structures up to numbers[:to_add] have been added, remove them from stock:
+            to_add = self.Nadd
+            struct_done = np.unique(np.concatenate([nu[:to_add] for nu in numbers]).ravel())
+            self.update_stock(struct_done)
+
+        # It's done!
+        print_success_message()
+
+
+
+
