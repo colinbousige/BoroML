@@ -27,88 +27,29 @@ Please [cite these articles](#how-to-cite) if you use any of the files in this a
 
 ## Contents of this archive
 
-```bash
-.
-├── LICENSE
-├── README.md
-├── lammps # Sample LAMMPS input files for launching an MD simulation with the MLIPs
-│   ├── DeePMD
-│   │   ├── input.lmp
-│   │   └── structure.data
-│   ├── n2p2
-│   │   ├── input.lmp
-│   │   └── structure.data
-│   └── NNMP
-│       ├── input.lmp
-│       └── structure.data
-├── potential # The actual MLIPs potential files
-│   ├── DeePMD
-│   │   └── graph.pb
-│   ├── n2p2
-│   │   ├── input.data
-│   │   ├── input.nn
-│   │   ├── scaling.data
-│   │   ├── weights.005.data
-│   │   └── weights.047.data
-│   ├── n2p2_JACS # The potential used in the JACS article
-│   │   ├── input.data
-│   │   ├── input.nn
-│   │   ├── scaling.data
-│   │   ├── weights.005.data
-│   │   └── weights.047.data
-│   └── NNMP
-│       ├── best
-│       │   ├── best_loss.npz
-│       │   ├── best.ckpt.data-00000-of-00001
-│       │   ├── best.ckpt.index
-│       │   └── checkpoint
-│       ├── model_parameters.txt
-│       └── train.log
-└── scripts # Various scripts used for post-treating the data or generating structures
-    ├── adaptive_learning
-    │   ├── __init__.py
-    │   ├── adaptive_training.py
-    │   ├── AdaptiveTraining.py
-    │   ├── Cluster.py
-    │   ├── environment.py
-    │   ├── functions.py
-    │   ├── jobadaptive
-    │   ├── README.md
-    │   ├── SlurmJob.py
-    │   └── xjobadaptive
-    ├── BoroPy.py
-    ├── generatorfunctions.py
-    ├── gofr.c
-    ├── packages.txt
-    ├── read_write.py
-    ├── requirements.txt
-    ├── xconvert
-    ├── xGDOS
-    ├── xgenerate-structure
-    ├── xLAMMPStoNNP
-    ├── xOUTCARtoLAMMPS
-    ├── xplotLAMMPSlog
-    ├── xplotLC
-    ├── xprepareDPdata
-    ├── xreadLAMMPSlog
-    └── xSTM
-```
+- [potential](https://github.com/colinbousige/BoroML/tree/main/potential): The potential files for the n2p2, DeePMD and NNMP MLIPs
+- [lammps](https://github.com/colinbousige/BoroML/tree/main/lammps): Sample LAMMPS input files for launching an MD simulation with the n2p2, DeePMD and NNMP MLIPs
+- [scripts](https://github.com/colinbousige/BoroML/tree/main/scripts): Various scripts used for post-treating the data or generating structures
 
 ## Description of the scripts
 
-Install all necessary libraries with `pip install -r requirements.txt`.
+Install all necessary libraries with:
+
+```bash
+pip install -r requirements.txt
+```
 
 ### Structure generators
 
 - `BoroPy.py`:
   - Streamlit GUI tool to build and visualize borophene structures
   - Usage (local): `streamlit run BoroPy.py`
-  - Or use the [online app](https://boroml-6lykqznd6cqcahzupk96cr.streamlit.app/)
-- `generatorfunctions.py`:
-  - Set of functions to generate borophene structures, write LAMMPS input files, etc. Called in other scripts.
+  - Or use the [online app](https://boroml.streamlit.app/)
 - `xgenerate-structure`:
   - Generate a borophene structure to stdout
   - Usage: `python xgenerate-structure -h` to get the help
+- `generatorfunctions.py`:
+  - Set of functions to generate borophene structures, write LAMMPS input files, etc. Called in other scripts.
 
 ### Post-treatment scripts
 
