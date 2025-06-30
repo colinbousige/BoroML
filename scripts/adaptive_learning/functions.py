@@ -30,8 +30,11 @@ def read_inputdata(filename: str, copy_data=None):
     atoms = [read_data_block(lines, b, e) for b,e in zip(begin, end)]
     energies = np.array([float(x.split()[1]) for x in lines if 'energy' in x])
     if copy_data is not None:
+        # if detect that copy_data is a path, create it if it does not exist
         if not Path(f"{copy_data}").is_dir():
             Path(f"{copy_data}").mkdir(parents=True)
+        # we write in vasp/ the inp files of the structures with non-zero energy, 
+        # i.e. the ones that already have been calculated
         to_copy = np.where(energies != 0)[0]
         for i in to_copy:
             with open(f"{copy_data}/OUTCAR_{i}.inp", 'w') as f:

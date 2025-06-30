@@ -2,6 +2,9 @@
 
 """
 Read log.lammps file to retrieve thermo data in a friendly csv format in stdout
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
 """
 
 import argparse
@@ -22,6 +25,9 @@ def main(args):
         else:
             sys.stderr.write(f'\n\nInput file {input} not found!\n\n\n')
             sys.exit()
+    if len(lines) == 0:
+        sys.stderr.write(f'\n\nInput file {input} is empty.\n\n\n')
+        sys.exit()
     run = 0
     begin = [i for i,b in enumerate(lines) if "Per MPI rank memory allocation" in b]
     ts = [b.split(": ")[1].strip() for i,b in enumerate(lines) if "  Time step     :" in b]
@@ -35,7 +41,9 @@ def main(args):
     sys.stdout.write(f"run,timestep,{','.join(header)}\n")
     for run in range(len(begin)):
         for i in range(begin[run]+2, end[run]):
-            if "#" not in lines[i]:
+            if "ERROR on proc" in lines[i]:
+                break
+            if "#" not in lines[i] and 'warning' not in lines[i].lower():
                 toprint = lines[i].split()
                 if 'ERROR' in toprint:
                     toprint=['NaN']*len(header)

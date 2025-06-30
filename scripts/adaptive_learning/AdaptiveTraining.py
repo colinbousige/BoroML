@@ -9,12 +9,12 @@ import fileinput
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from ase.io import write
+from ase.calculators.vasp import Vasp
 from functools import reduce
 from itertools import combinations
 from .functions import read_inputdata, write_inputdata, print_success_message
 from .SlurmJob import SlurmJob
 from .Cluster import Cluster
-
 
 class AdaptiveTraining:
     """
@@ -96,17 +96,16 @@ class AdaptiveTraining:
     """
     
     def __init__(self, 
-                 path        = os.getcwd(),
-                 Nadd        = 20,
-                 restart     = False,
-                 clusterNNP  = Cluster(),
-                 clusterVASP = Cluster(),
-                 vasp_Nnodes = 4,
-                 Nepoch: int = None,
-                 atoms       = "BAg",
-                 minimize    = "energy",
-                 Kpoints     = "7 7 1",
-                 ENCUT       = 700
+                 path            = os.getcwd(),
+                 Nadd:int        = 20,
+                 restart:bool    = False,
+                 clusterNNP      = Cluster(),
+                 clusterVASP     = Cluster(),
+                 vasp_Nnodes:int = 4,
+                 Nepoch:int      = None,
+                 minimize        = "energy",
+                 Kpoints         = [7,7,1],
+                 ENCUT:float     = 700
                  ):
         self.path = path
         """Working directory"""
@@ -124,9 +123,13 @@ class AdaptiveTraining:
         """Numbers of NNPs: gotten from the number of 'inputX.nn' files"""
         self.Ncomb = sum(1 for _ in combinations(range(self.Nnnp), 2))
         """Numbers of combinations of NNPs: automatic determination from self.Nnnp"""
-        self.atoms = atoms
-        """Atom types in the system"""
         self.minimize = minimize
+        if self.minimize.lower() not in ["energy", "forces",'e','f','energies','force']:
+            raise ValueError("minimize must be either 'energy' or 'forces'")
+        if self.minimize.lower() in ['e', 'energies']:
+            self.minimize = "energy"
+        if self.minimize.lower() in ['f', 'force']:
+            self.minimize = "forces"
         """During the adaptive training, the quantity to compare between NNP1 and NNP2. 
         If "energy", the energy difference is minimized. If "force", the force difference is minimized."""
         self.initialize()
@@ -146,16 +149,20 @@ class AdaptiveTraining:
         """Total number of iterations to perform."""
         self.stock = self.read_stock()
         """Dict of {id, comment, structures} of stock structures."""
+        self.atoms = np.sort(np.unique(self.stock['structures'][0].get_atomic_numbers()))
+        """Atom types aromic numbers in the system"""
         self.Kpoints   = Kpoints
         """Kpoints for VASP calculations"""
         self.ENCUT     = ENCUT
         """Energy cutoff for VASP calculations"""
+        self.write_vasp_files(path='vasp') # write INCAR, KPOINTS, POTCAR files
         print("""─────────────────────────────────────────────────────────────
 *   Adaptive construction of the dataset for NNP training   *
 ─────────────────────────────────────────────────────────────""", flush=True)
         print(self.__str__())
         if self.restart == False and Path(f"{self.path}/EW.data").is_file():
             self.add_ew()
+            self.write_vasp_files(path='EW') # write INCAR, KPOINTS, POTCAR files
     
     def __repr__(self):
         return(self.__str__())
@@ -199,8 +206,11 @@ class AdaptiveTraining:
                     subprocess.run(f"cp {self.path}/input{i}.nn {self.path}/NNP{i}/predict/input.nn", shell=True)
                     subprocess.run(f"cp {self.path}/initial_input.data {self.path}/NNP{i}/train/input.data", shell=True)
                     subprocess.run(f"cp {self.path}/stock.data {self.path}/NNP{i}/predict/input.data", shell=True)
-                    for line in fileinput.input(f"{self.path}/NNP{i}/train/input.nn", inplace = 1): 
-                        print(line.replace("test_fraction ", "test_fraction 0 #"), end='')
+                    subprocess.run(f"sed -i 's/test_fraction /test_fraction 0 #/g' {self.path}/NNP{i}/train/input.nn", shell=True)
+                    subprocess.run(f"sed -i 's/write_weights_epoch /write_weights_epoch 1 #/g' {self.path}/NNP{i}/train/input.nn", shell=True)
+                    subprocess.run(f"sed -i 's/write_trainpoints /write_trainpoints 100 #/g' {self.path}/NNP{i}/train/input.nn", shell=True)
+                    subprocess.run(f"sed -i 's/write_trainforces /write_trainforces 100 #/g' {self.path}/NNP{i}/train/input.nn", shell=True)
+                    subprocess.run(f"sed -i 's/write_neuronstats /write_neuronstats 100 #/g' {self.path}/NNP{i}/train/input.nn", shell=True)
         else:
             print(f"""Make sure the following files are in the {self.path} folder:
     - `input1.nn`: input.nn for NNP1
@@ -325,14 +335,9 @@ class AdaptiveTraining:
         print(f"├─ Copying weights from epochs {BestRmse}...\n│", flush=True)
         for i in range(1, self.Nnnp+1):
             nnppath=f'{self.path}/NNP{i}'
-            if self.atoms == "BAg":
-                subprocess.run(f'cp {nnppath}/train/weights.047.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.047.data', shell=True)
-                subprocess.run(f'cp {nnppath}/train/weights.047.data {nnppath}/predict/', shell=True)
-            if self.atoms == "BAu":
-                subprocess.run(f'cp {nnppath}/train/weights.079.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.079.data', shell=True)
-                subprocess.run(f'cp {nnppath}/train/weights.079.data {nnppath}/predict/', shell=True)
-            subprocess.run(f'cp {nnppath}/train/weights.005.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.005.data', shell=True)
-            subprocess.run(f'cp {nnppath}/train/weights.005.data {nnppath}/predict/', shell=True)
+            for Z in self.atoms:
+                subprocess.run(f'cp {nnppath}/train/weights.{Z:03d}.{BestRmse[i-1]:06d}.out {nnppath}/train/weights.{Z:03d}.data', shell=True)
+                subprocess.run(f'cp {nnppath}/train/weights.{Z:03d}.data {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/input.nn {nnppath}/predict/', shell=True)
             subprocess.run(f'cp {nnppath}/train/scaling.data {nnppath}/predict/', shell=True)
             # subprocess.run(f'mv {nnppath}/train/input.nn.bak {nnppath}/train/input.nn', shell=True)
@@ -360,7 +365,6 @@ class AdaptiveTraining:
         for i in range(1, self.Nnnp+1):
             nnppath=f'{self.path}/NNP{i}'
             subprocess.run(f'rm -f {nnppath}/predict/*.out', shell=True)
-
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -422,37 +426,37 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def plot_convergence(self, save=True, type="energy"):
+    def plot_convergence(self, save=True):
         """
         Plot convergence of adaptative training
         """
-        typ = 'E' if type == "energy" else 'F'
+        typ = 'E' if self.minimize == "energy" else 'F'
+        unit = 'meV/at' if self.minimize == "energy" else 'meV/Å'
         data = pd.read_csv(f'{self.path}/training.csv', comment='#')
-        fig, (ax1,ax2) = plt.subplots(1,2, tight_layout=True, figsize=(8, 4))
+        fig, (ax1,ax2,ax3) = plt.subplots(1,3, tight_layout=True, figsize=(9, 4),
+                                        gridspec_kw={'width_ratios':[3,3,1]})
         fig.suptitle(f"Convergence plot", fontweight="bold")
         ax1.set_title(f"$|\Delta {typ}|$", fontweight="bold")
         ax1.set_xlabel('Dataset Size')
-        ax1.set_ylabel(f'$|\Delta {typ}|$ [meV/at]')
+        ax1.set_ylabel(f'$|\Delta {typ}|$ [{unit}]')
         ax1.grid()
         ax1.set_ylim([0, max(data[f'd{typ}mean1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
             ax1.plot(data.N, data[f'd{typ}mean{i}-{j}'], 
-                     label=f'$NNP{i}-NNP{j}$')
+                        label=f'$NNP{i}-NNP{j}$')
 
         ax2.set_title(f"$std(\Delta {typ})$", fontweight="bold")
         ax2.set_xlabel('Dataset Size')
-        ax2.set_ylabel(f'$std(\Delta {typ})$ [meV/at]')
+        ax2.set_ylabel(f'$std(\Delta {typ})$ [{unit}]')
         ax2.grid()
         ax2.set_ylim([0, 5*min(data[f'd{typ}std1-2'])])
         for i,j in combinations(range(1, self.Nnnp+1), 2):
             ax2.plot(data.N, data[f'd{typ}std{i}-{j}'], 
-                     label=f'$NNP{i}-NNP{j}$')
+                        label=f'$NNP{i}-NNP{j}$')
 
         Line, Label = ax1.get_legend_handles_labels()
-        Tot = self.Ncomb
-        fig.legend(Line, Label, 
-                   loc='lower center', ncol=int(Tot/2),
-                   bbox_to_anchor=(0.5,-0.15))
+        ax3.legend(Line, Label)
+        ax3.axis('off')
         if save:
             plt.savefig(f"{self.path}/convergence.jpg", dpi=300, bbox_inches='tight')
             plt.cla()
@@ -473,9 +477,9 @@ class AdaptiveTraining:
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    def plot_distrib(self, data, i=0, save=True, type="energy"):
+    def plot_distrib(self, data, i=0, save=True):
         """
-        Plot histogram of E_{NNP2} - E_{NNP1} to `plots/histogram_{i:05d}.jpg`
+        Plot histogram of E_{NNP2} - E_{NNP1} or F_{NNP2} - F_{NNP1} to `plots/histogram_{i:05d}.jpg`
         """
         Tot = self.Ncomb
         Cols = 1
@@ -483,7 +487,7 @@ class AdaptiveTraining:
         if Tot % Cols != 0:
             Rows += 1
         # # # # # 
-        typ = 'E' if type == "energy" else 'F'
+        typ = 'E' if self.minimize == "energy" else 'F'
         
         fig,axes = plt.subplots(Rows,Cols, tight_layout=True, sharex=True, sharey=True, figsize=(8, Tot*2.5))
         fig.suptitle(f'Iteration {i}')
@@ -491,11 +495,12 @@ class AdaptiveTraining:
         if Tot == 1:
             axes = [axes]
         for (k,j),ax in zip(combinations(range(1, self.Nnnp+1), 2), axes):
-            if type == "energy":
+            if self.minimize == "energy":
                 ax.set_xlabel(f'${typ}_{{NNP_i}} - {typ}_{{NNP_j}}$ [meV/atom]')
+                x = data[f"Ennp{k}"] - data[f"Ennp{j}"]
             else:
                 ax.set_xlabel(f'${typ}_{{NNP_i}} - {typ}_{{NNP_j}}$ [meV/Å]')
-            x = data[f'{typ}nnp{k}'] - data[f'{typ}nnp{j}']
+                x = data[f"dif{k}-{j}"]
             ax.hist(x, 50, facecolor=list(mcolors.TABLEAU_COLORS)[l], rwidth=.98, log=True, label=f'${typ}_{{NNP{k}}} - {typ}_{{NNP{j}}}$')
             ax.set_ylabel('Count')
             ax.grid()
@@ -603,7 +608,7 @@ class AdaptiveTraining:
         # append Fnnp{i} for all other NNPs
         for i in range(self.Nnnp):
             colnames=["index_s", "index_a", f"Fnnp{i+1}"]
-            d = pd.read_csv(fF[i], delim_whitespace=True, usecols=[0,1,3],
+            d = pd.read_csv(fF[i], sep='\s+', usecols=[0,1,3],
                             comment="#", skiprows=13, names=colnames)
             d.sort_values(by=['index_s', 'index_a'], inplace=True)
             conv_energy, conv_length = read_input(finput[i])
@@ -612,16 +617,17 @@ class AdaptiveTraining:
         data["index_s"] = d[f"index_s"].to_numpy() # take the index from the last DataFrame they are the same and in increasing order    
         # Compute Forces Differences in meV/Å
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            data[f'dif{i}-{j}'] = np.abs(data[f"Fnnp{i}"] - data[f"Fnnp{j}"])
+            data[f'dif{i}-{j}'] = (data[f"Fnnp{i}"] - data[f"Fnnp{j}"])
+            data[f'absdif{i}-{j}'] = np.abs(data[f"Fnnp{i}"] - data[f"Fnnp{j}"])
         # Drop Fnnp{i} columns
         #data = data.drop(columns=[f'Fnnp{i}' for i in range(1, self.Nnnp+1)]).drop(columns=['index_a']) # we need them for plot_distribution
         # group data by index_s and compute mean of all dif{i}-{j} columns
         datagrouped = data.groupby('index_s').mean()
         dFmean, dFstd, numbers = [], [], []
         for i,j in combinations(range(1, self.Nnnp+1), 2):
-            dFmean  += [np.mean(datagrouped[f'dif{i}-{j}'])]
-            dFstd   += [np.std(datagrouped[f'dif{i}-{j}'])]
-            Fsorted = datagrouped.sort_values(by=[f'dif{i}-{j}'], ascending=False)
+            dFmean  += [np.mean(datagrouped[f'absdif{i}-{j}'])]
+            dFstd   += [np.std(datagrouped[f'absdif{i}-{j}'])]
+            Fsorted = datagrouped.sort_values(by=[f'absdif{i}-{j}'], ascending=False)
             numbers += [np.array(Fsorted.index)]
         return(dFmean, dFstd, numbers, datagrouped)
 
@@ -650,12 +656,23 @@ class AdaptiveTraining:
         Read initial stock file, and copy structures already computed at DFT level in /vasp
         """
         # # # # # # # # # # # # 
-        atoms, comments = read_inputdata(filename  = f"{self.path}/NNP1/predict/input.data",
-                                         copy_data = f"{self.path}/vasp")
-        id = [i for i in range(len(atoms))]
-        return({'id':id, 
-                'structures':atoms, 
-                'comments':comments})
+        if self.restart == False:
+            atoms, comments = read_inputdata(filename  = f"{self.path}/stock.data",
+                                             copy_data = f"{self.path}/vasp")
+            id = [i for i in range(len(atoms))]
+        else:
+            atoms, comments = read_inputdata(filename  = f"{self.path}/stock.data")
+            id = [i for i in range(len(atoms))]
+            # find all structures already computed at DFT level, i.e. the ones with corresponding OUTCAR_xx.inp in vasp/
+            computed = glob.glob(f"{self.path}/vasp/OUTCAR_*.inp")
+            computed = [int(c.split('_')[-1].split('.')[0]) for c in computed]
+            # remove the corresponding structures from the stock
+            atoms = [a for i,a in enumerate(atoms) if i not in computed]
+            comments = [c for i,c in enumerate(comments) if i not in computed]
+            id = [i for i in id if i not in computed]
+        return({'id'        : id, 
+                'structures': atoms, 
+                'comments'  : comments})
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
@@ -672,6 +689,48 @@ class AdaptiveTraining:
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
+    def write_vasp_files(self, path='vasp', ibrion = -1, isif = 2):
+        """
+        Write VASP input files for a given ASE atoms object. 
+        Outputs INCAR, KPOINTS, POSCAR, and POTCAR files in the `directory` directory.
+        """
+        atoms = self.stock['structures'][0]
+        outputfolder = f"{self.path}/{path}"
+        calc = Vasp(
+            directory = outputfolder,
+            # READ WRITE CHARGE WAVE FC FILES
+            lcharg    = False,
+            lwave     = False,
+            istart    = 1,
+            # Precision
+            lreal     = 'Auto',
+            prec      = 'med',
+            encut     = self.ENCUT,
+            # MD PARAMETERS
+            ibrion    = ibrion,
+            isif      = isif,
+            nsw       = 0,
+            # ELECTRONIC PARAMETERS
+            ediff     = 1E-5,
+            ediffg    = -0.05,
+            algo      = 'Fast',
+            nelmin    = 6,
+            xc        = "pbe",
+            # Forces
+            ivdw      = 11,
+            npar      = 4,
+            lplane    = True,
+            ncore     = 8,
+            lscalu    = False,
+            nsim      = 4,
+            # K-point grid settings
+            kpts      = self.Kpoints,
+            gamma     = False
+        )
+        calc.write_input(atoms)
+    
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
     def do_scaling(self, wait=3):
         """
         Perform the scaling of all NNPs and wait until it's done
@@ -680,7 +739,6 @@ class AdaptiveTraining:
         scale = []
         for i in range(1, self.Nnnp+1):
             scale += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = 'nnp-scaling', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -709,7 +767,6 @@ class AdaptiveTraining:
             scale = []
             for i in todo:
                 scale += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = 'nnp-scaling', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -733,7 +790,6 @@ class AdaptiveTraining:
         train = []
         for i in range(1, self.Nnnp+1):
             train += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/train", 
                     cluster = self.clusterNNP,
@@ -761,7 +817,6 @@ class AdaptiveTraining:
             train = []
             for i in todo:
                 train += [SlurmJob(
-                        atoms   = self.atoms,
                         type    = 'nnp-train', 
                         path    = f"{self.path}/NNP{i}/train", 
                         cluster = self.clusterNNP,
@@ -774,26 +829,6 @@ class AdaptiveTraining:
         else:
             print(f"├─▶︎ Training of all NNPs successful.\n│",flush=True)
             return(True)
-
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    
-    def do_NNPs(self):
-        """
-        Perform the, scaling, training and prediction of both NNPs and wait until it's done. The saved weights are the ones of the last epoch.
-        """
-        nnps = []
-        for i in range(1, self.Nnnp+1):
-            nnps += [SlurmJob(
-                    atoms   = self.atoms,
-                    type    = 'nnp-all', 
-                    path    = f"{self.path}/NNP{i}", 
-                    Nepoch  = self.Nepoch,
-                    cluster = self.cluster,
-                    jobname = f"NNP{i}", 
-                    launch  = True)]
-        while any([nnp.is_running() for nnp in nnps]) == True:
-            time.sleep(10)
-        print(f"└──▶︎ Done at {time.strftime('%H:%M:%S on %Y-%m-%d', time.gmtime())}\n│",flush=True)
     
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
@@ -806,7 +841,6 @@ class AdaptiveTraining:
         predict = []
         for i in range(1, self.Nnnp+1):
             predict += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/predict", 
                     cluster = self.clusterNNP,
@@ -834,7 +868,6 @@ class AdaptiveTraining:
             predict = []
             for i in todo:
                 predict += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = 'nnp-train', 
                     path    = f"{self.path}/NNP{i}/predict", 
                     cluster = self.clusterNNP,
@@ -863,14 +896,11 @@ class AdaptiveTraining:
             Nnodes = self.vasp_Nnodes if len(todo)>=self.vasp_Nnodes else len(todo)
             for i in range(Nnodes):
                 vasp += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = "vasp", 
                     path    = f"{self.path}/vasp", 
                     cluster = self.clusterVASP,
                     jobname = f"vasp{i+1}", 
-                    numbers = todo[int(i*len(todo)/Nnodes):int((i+1)*len(todo)/Nnodes)],
-                    Kpoints = self.Kpoints,
-                    ENCUT   = self.ENCUT,
+                    numbers = todo[(i*len(todo)//Nnodes):((i+1)*len(todo)//Nnodes)],
                     launch  = True)]
             while any([v.is_running() for v in vasp]) == True:
                 time.sleep(10)
@@ -901,14 +931,11 @@ class AdaptiveTraining:
             Nnodes = self.vasp_Nnodes if len(todo)>=self.vasp_Nnodes else len(todo)
             for i in range(Nnodes):
                 vasp += [SlurmJob(
-                    atoms   = self.atoms,
                     type    = "vasp", 
                     path    = f"{self.path}/EW", 
                     cluster = self.clusterVASP,
                     jobname = f"vasp{i+1}", 
-                    numbers = todo[int(i*len(todo)/Nnodes):int((i+1)*len(todo)/Nnodes)],
-                    Kpoints = self.Kpoints,
-                    ENCUT   = self.ENCUT,
+                    numbers = todo[(i*len(todo)//Nnodes):((i+1)*len(todo)//Nnodes)],
                     launch  = True)]
             while any([v.is_running() for v in vasp]) == True:
                 time.sleep(10)
@@ -972,9 +999,9 @@ class AdaptiveTraining:
             self.write2log(Nstruct, RMSE, dmean, dstd)
             # Make plots
             self.plot_RMSE_training(i, forces=True)
-            self.plot_distrib(quantities, i, type = self.minimize)
+            self.plot_distrib(quantities, i)
             if i > 1:
-                self.plot_convergence(type = self.minimize)
+                self.plot_convergence()
             # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
             print(f"│\n├───▶︎ Making VASP calculations on the {self.Nadd} structures with largest E difference\n│", flush=True)
             # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

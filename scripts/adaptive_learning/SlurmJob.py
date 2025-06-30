@@ -1,21 +1,9 @@
 import time
 import re
 import subprocess
+import os
 from . import Cluster
-
-# Path to VASP executable
-vasp_dir = "/softs/CompChemPackages/VASP6/OpenMpiIntelLib"
-# Path to scratch directory on the cluster
-clusterwdir = "/scratch/$USER/vasp"
-# Where to find the VASP input files: INCAR, POTCAR, KPOINTS
-# For POTCAR files, should be named POTCAR_{atoms} where {atoms} is the atom types in the system ("BAg" or "BAu")
-inputs_VASP = "$HOME/Boro_ML/bin/inputs_VASP"
-# Where to find the adaptive_learning scripts and convert-VASP_OUTCAR_AU.py from n2p2
-mybin = "$HOME/Boro_ML/bin"
-# Path where n2p2 is installed, as well as the GSL library and OpenMPI environment scripts to source
-n2p2_dir = "$HOME/bin/n2p2"
-openmpi_env = "$HOME/bin/openmpi401/openmpi4.sh"
-gsl_env = "$HOME/bin/gsl/gsl.sh"
+from .environment import *
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -38,8 +26,6 @@ class SlurmJob:
         Launch the job upon creation or not?
     `maxtries`: int, optional. Default = 20
         Maximum number of submission tries for jobs before giving up
-    `Nepoch`: int, optional. Default = 30
-        Numbers of epochs in the training part
     
     ## Methods
     `write_job()`
@@ -78,8 +64,8 @@ class SlurmJob:
     True
     """
     
-    def __init__(self, type: str, cluster: Cluster, path='.', Nepoch=30, atoms = "BAg",
-                 jobname='job', numbers=[], launch=False, maxtries=20, wait=3, Kpoints='7 7 1', ENCUT=700):
+    def __init__(self, type: str, cluster: Cluster, path='.', 
+                 jobname='job', numbers=[], launch=False, maxtries=20, wait=3):
         if not type in ['vasp', 'nnp-train', 'nnp-scaling', 'nnp-all']:
             raise TypeError("type must be one of 'vasp', 'nnp-train', 'nnp-scaling', or 'nnp-all'.")
         self.node      = ''
@@ -105,16 +91,8 @@ class SlurmJob:
         """Maximum number of submission tries for jobs before giving up"""
         self.cluster   = cluster
         """Cluster object"""
-        self.Nepoch    = Nepoch
-        """Numbers of epochs in the training part"""
-        self.atoms     = atoms
-        """Atom types in the system"""
         self.wait      = wait
         """Time to wait between submission tries"""
-        self.Kpoints   = Kpoints
-        """Kpoints for VASP calculations"""
-        self.ENCUT     = ENCUT
-        """Energy cutoff for VASP calculations"""
         if launch:
             """Launch the job upon creation or not?"""
             self.assign_node()
@@ -141,20 +119,20 @@ running   = {self.is_running()}"""
     def write_header(self):
         """Write job header of job script"""
         if self.type == "vasp":
-            kpoints=f"K-Points\\n0\\nMonkhorst Park\\n{self.Kpoints}\\n0 0 0\\n"
             add = f"""VASPDIR={vasp_dir}
 WDIR={clusterwdir}-{self.jobname}
 source $VASPDIR/env.sh
 
 mkdir -p $WDIR || exit 1
 cd $WDIR
-cp {inputs_VASP}/INCAR .
-cp {inputs_VASP}/POTCAR_{self.atoms} ./POTCAR
-echo -e \"{kpoints}\" > ./KPOINTS 
-sed -i "s/ENCUT=/ENCUT={self.ENCUT}  \!/g" INCAR
+cp {self.path}/INCAR .
+cp {self.path}/POTCAR .
+cp {self.path}/KPOINTS .
 """
         if "nnp" in self.type:
-            add = f"""export N2P2DIR={n2p2_dir}
+            add = f"""source {openmpi_env}
+source {gsl_env}
+export N2P2DIR={n2p2_dir}
 export LD_LIBRARY_PATH=$N2P2DIR/lib:$LD_LIBRARY_PATH
 export PATH={mybin}:$N2P2DIR/bin:$PATH
 """
@@ -170,8 +148,6 @@ export PATH={mybin}:$N2P2DIR/bin:$PATH
 #SBATCH -e {self.path}/{self.jobname}.e
 
 export OMP_NUM_THREADS=1
-source {openmpi_env}
-source {gsl_env}
 MPIBIN=mpirun
 PAT={self.path}
 {add}
@@ -184,7 +160,7 @@ PAT={self.path}
             for i in self.numbers:
                 out += f"""
 cp $PAT/POSCAR_{i} $WDIR/POSCAR
-$MPIBIN -np {int(self.nproc/2)} --bind-to core $VASPDIR/vasp_std
+$MPIBIN -np {int(self.nproc//2)} $VASPDIR/vasp_std
 mv $WDIR/OUTCAR $PAT/OUTCAR_{i}
 python {mybin}/convert-VASP_OUTCAR_AU.py $PAT/OUTCAR_{i} $PAT/OUTCAR_{i}.inp
 
@@ -193,41 +169,14 @@ python {mybin}/convert-VASP_OUTCAR_AU.py $PAT/OUTCAR_{i} $PAT/OUTCAR_{i}.inp
             out = f"""
 cd $PAT
 
-$MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
+$MPIBIN -np {int(self.nproc//2)} --bind-to core $N2P2DIR/bin/nnp-train
 """
         if self.type == "nnp-scaling":
-            if {self.atoms} == 'BAg':
-                writecopy = f'''cp $PAT/train/weights.047.{self.Nepoch:06d}.out $PAT/train/weights.047.data
-cp $PAT/train/weights.047.data $PAT/predict/'''
-            if {self.atoms} == 'BAu':
-                writecopy = f'''cp $PAT/train/weights.079.{self.Nepoch:06d}.out $PAT/train/weights.079.data
-cp $PAT/train/weights.079.data $PAT/predict/'''
             out = f"""
 cd $PAT
 
 $MPIBIN -np {self.nproc} $N2P2DIR/bin/nnp-scaling 5
 rm -f sf*.histo
-"""
-        if self.type == "nnp-all":
-            out = f"""
-# mv $PAT/train/input.nn.bak $PAT/train/input.nn
-cd $PAT/train/
-$MPIBIN -np 4 $N2P2DIR/bin/nnp-scaling 5
-rm -f sf*.histo
-$MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
-
-cp $PAT/train/weights.005.{self.Nepoch:06d}.out $PAT/train/weights.005.data
-cp $PAT/train/weights.005.data $PAT/predict/
-{writecopy}
-cp $PAT/train/input.nn $PAT/predict/
-cp $PAT/train/scaling.data $PAT/predict/
-
-cd $PAT/predict/
-sed -i "s/epochs /epochs 0 #/g" input.nn
-sed -i "s/test_fraction /test_fraction 0 #/g" input.nn
-sed -i "s/#use_old_weights_short/use_old_weights_short/g" input.nn
-sed -i "s/normalize_data_set/#normalize_data_set/g" input.nn
-$MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
 """
         return(out)
     
@@ -246,13 +195,14 @@ $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
         midcount=0
         if self.node == '':
             self.assign_node()
+        if not os.path.exists(f"{self.path}/{self.jobname}"):
             self.write_job()
         while Ntries < self.maxtries:
             Ntries += 1
             msg = subprocess.run(f"sbatch {self.path}/{self.jobname}", shell=True, 
                     capture_output=True).stdout.decode('utf-8').split('\n')[0]
             jobnumber = re.findall(r'\d+', msg)
-            if len(jobnumber)==0:
+            if len(jobnumber)==0: # if job submission failed for some reason, try again
                 time.sleep(2)
                 self.assign_node()
                 self.write_job()
@@ -264,7 +214,6 @@ $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
             msg = subprocess.run(f"squeue -u $USER", shell=True, 
                 capture_output=True).stdout.decode('utf-8')
             if self.jobnumber in msg:
-                self.jobnumber = jobnumber[0]
                 self.running = True
                 print(f"  ──▶︎ OK.", flush=True)
                 break
@@ -310,9 +259,6 @@ $MPIBIN -np {int(self.nproc/2)} --bind-to core $N2P2DIR/bin/nnp-train
             self.node  = self.cluster.preferred_node
             self.nproc = cluster_state[cluster_state.NodeName.isin([self.node])].CPUTot.tolist()[0]
             self.queue = cluster_state[cluster_state.NodeName.isin([self.node])].Partitions.tolist()[0]
-        # if 'l-node' in self.node:
-        #     NprocMax = cluster_state[cluster_state.NodeName.isin([self.node])].CPUTot.tolist()[0]
-        #     self.nproc = int(NprocMax/2) if self.nproc>NprocMax/2 else self.nproc
         if self.type == 'nnp-scaling':
-            self.nproc = 4
+            self.nproc = self.nproc//2 #4
 

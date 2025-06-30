@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH -J adaptive_training
+#SBATCH -A theochem
+#SBATCH -p tc1
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -w node27
+#SBATCH -t UNLIMITED
+#SBATCH -e ./adaptive_training.err
+#SBATCH -o ./adaptive_training.out
+
+export OMP_NUM_THREADS=1
+export PYTHONPATH=$PYTHONPATH:$HOME/Boro_ML/bin
+export VASP_PP_PATH=$HOME/bin/vasp
+PYTHONBIN=/softs/anaconda3/bin/python3
+
+PAT=.
+cp $HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py $PAT
+cd $PAT
+$PYTHONBIN adaptive_training.py
+

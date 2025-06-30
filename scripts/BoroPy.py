@@ -1,4 +1,15 @@
-# run with "streamlit run BoroPy.py"
+
+"""
+Streamlit app to build borophene structures on metal substrates.
+Run with:
+
+```bash
+streamlit run BoroPy.py
+```
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
+"""
 
 from generatorfunctions import *
 from fractions import Fraction
@@ -56,6 +67,8 @@ dico_predef = {'\u03b1'  :(3,3,[0,10]), #alpha
                                   454,472,491,509,271]), #alpha2
                '\u03b14' :(9,9,[0,11,23,34,37,48,60,71,97,85,74,99,111,136,122,148,134,159]), #alpha4
                '\u03b15' :(2,6,[0,15]), #alpha5
+               '\u03b16' :(2,3,[0]),    #alpha6
+               '\u03b17' :(12,8,[0,4,25,29,55,51,76,102,98,72,127,123,149,174,145,170]),    #alpha7
                '\u03b43' :(1,3,[0,4]),  #delta3
                '\u03b44' :(1,2,[0]),    #delta4
                '\u03b45' :(7,7,[0,16,11,32,52,73,93,36,57,77,48,27,68,89]),    #delta5
@@ -213,7 +226,9 @@ Nboro = left.number_input("Number of borophene layers", min_value=1, value=1, ke
 toplayer = right.selectbox("Top layer", ['']+[k for k in islands.keys()], key='predefislands')
 TopLayer = None if toplayer=='' else islands[toplayer]
 randshifttop = left.number_input("Random lateral shift of top layers", min_value=0., max_value=10., value=0., step=0.5)
-
+stacking = right.selectbox("Stacking type", ('AA', 'AB'))
+stackshiftx = left.number_input("Shift x between layers [Å]", min_value=0., max_value=None, value=0., step=1.)
+stackshifty = right.number_input("Shift y between layers [Å]", min_value=0., max_value=None, value=0., step=1.)
 
 # # # # # # # # # # # # # # # # # # 
 st.sidebar.write("# Solubilized Boron")
@@ -250,7 +265,10 @@ struct = create_structure(
     island_angle=island_angle,
     island_rotate=island_rotate,
     toplayer=TopLayer,
-    randshifttop=randshifttop
+    randshifttop=randshifttop, 
+    stacking = stacking,
+    stackshiftx=stackshiftx,
+    stackshifty=stackshifty
 )
 
 base = create_structure(

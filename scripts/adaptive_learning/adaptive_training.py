@@ -12,15 +12,14 @@ lynxnnp  = Cluster(preferred_node = 'l-node04',
 
 # Initialize an AdaptiveTraining object:
 AT = AdaptiveTraining(Nadd        = 50, 
-                      restart     = False, 
                       Nepoch      = 20,
+                      restart     = False,
                       clusterNNP  = lynxnnp,
                       clusterVASP = lynxvasp,
                       vasp_Nnodes = 4,
-                      Kpoints     = '7 7 1',
+                      Kpoints     = [7,7,1],
                       ENCUT       = 700,
-                      atoms       = "BAg",
-                      minimize    = 'forces')
+                      minimize    = 'F')
 # /!\ Set to restart=True if restarting after stopping job, 
 # /!\ otherwise it will restart from scratch!
 
