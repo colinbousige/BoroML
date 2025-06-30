@@ -2,6 +2,9 @@
 
 """
 Convert an OUTCAR trajectory file to a lammpstrj file
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
 """
 
 from generatorfunctions import *

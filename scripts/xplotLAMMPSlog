@@ -1,0 +1,138 @@
+#!/usr/local/bin/python3
+
+"""
+Plot thermo data from log.lammps file
+
+Copyright (c) 2025 Colin Bousige
+Licensed under the MIT License
+"""
+
+import argparse
+import sys
+import os
+import subprocess
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd 
+
+boldorange = "\033[93m\033[1m"
+orange = "\033[93m"
+normal = "\033[0m"
+
+def main(args):
+    input = args.input
+    cols = args.cols
+    
+    if not os.path.exists(input):
+        sys.stderr.write(f"\n{boldorange}ERROR:{normal} The input file '{input}' does not exist.\n\n")
+        sys.exit(1)
+    
+    with open(input, "r") as f:
+        lines = f.readlines()
+
+    run = 0
+    begin = [i for i,b in enumerate(lines) if "Per MPI rank memory allocation" in b]
+    end = [i for i,e in enumerate(lines) if "Loop time" in e]
+    #in case the run has not finished yet, i.e. when reading `lammps.out`
+    if len(begin)>len(end):
+        end.append(len(lines))
+
+    header = lines[begin[0]+1].split()
+    with open('tmp','w') as f:
+        f.write(f"{','.join(header)},run\n")
+        for run in range(len(begin)):
+            for i in range(begin[run]+2, end[run]):
+                if "ERROR on proc" in lines[i]:
+                    break
+                if "#" not in lines[i] and 'warning' not in lines[i].lower():
+                    toprint = lines[i].split()
+                    f.write(f"{','.join(toprint)},{run+1}\n")
+
+    data = pd.read_csv('tmp')
+    os.remove('tmp')
+    if len(args.remrun)>0:
+        data = data[~data['run'].isin(args.remrun)]
+    
+    if cols is None:
+        cols = data.columns[1:]
+        print(f"Available columns: {boldorange}{' '.join(cols.tolist())}{normal}\n")
+    
+    nruns = len(set(data.run))
+    runs = sorted(set(data.run))
+    
+    fig, ax = plt.subplots(nrows=nruns, ncols=len(cols), 
+                           figsize=(3*len(cols),3*nruns), 
+                           tight_layout=True)
+    if nruns > 1:
+        for row in range(nruns):
+            for col in range(len(cols)):
+                mydata = data[data['run'] == runs[row]]
+                if col==0: 
+                    ax[row][col].set_title(f"Run {runs[row]}", fontweight="bold", loc='left')
+                ax[row][col].set_xlabel('Step')
+                ax[row][col].set_ylabel(cols[col])
+                ax[row][col].grid()
+                ax[row][col].scatter(mydata.Step, mydata[cols[col]], alpha=0.9)
+                ax[row][col].plot(mydata.Step, mydata[cols[col]], alpha=0.9)
+    else:
+        for col in range(len(cols)):
+            mydata = data[data['run'] == runs[0]]
+            if col==0: 
+                ax[col].set_title(f"Run {runs[0]}", fontweight="bold", loc='left')
+            ax[col].set_xlabel('Step')
+            ax[col].set_ylabel(cols[col])
+            ax[col].grid()
+            ax[col].scatter(mydata.Step, mydata[cols[col]], alpha=0.9)
+            ax[col].plot(mydata.Step, mydata[cols[col]], alpha=0.9)
+    if args.save:
+        plt.savefig(f"log.png")
+        subprocess.run(f"imgcat log.png", shell=True)
+    else:
+        plt.show()
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{boldorange}Read log.lammps file to retrieve thermo data in a friendly csv format in stdout.{normal}
+""")
+    parser.add_argument('--input', '-in',
+                        help    = 'Input file name to read.',
+                        default = "lammps.out")
+    parser.add_argument('--cols', '-c',
+                        nargs   = '*',
+                        help    = 'Columns to plot as a function of `Step`.',
+                        default = None)
+    parser.add_argument('--remrun', '-rr',
+                        nargs   = '*',
+                        type    = int,
+                        help    = 'Runs to remove.',
+                        default = [])
+    parser.add_argument('--save', '-s',
+                        help    = 'Save the plot to a file.',
+                        default = False,
+                        action  = 'store_true')
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    

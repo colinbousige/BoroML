@@ -1,0 +1,194 @@
+#!/usr/local/bin/python3
+
+"""
+Plot DeepMD or n2p2 learning curve
+
+Copyright (c) 2025 Colin Bousige
+Licensed under the MIT License
+"""
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import os
+import argparse
+import subprocess
+
+orange = "\033[93m"
+bold   = "\033[1m"
+normal = "\033[0m"
+
+defaultinput = "./lcurve.out"
+if not os.path.exists(defaultinput):
+    defaultinput = "./learning-curve.out"
+
+
+def main(args):
+
+    if not os.path.exists(args.input):
+        print(f"\n\nError: `{args.input}` file not found\n\n")
+        exit(1)
+
+    if "lcurve.out" in args.input:
+        data = pd.read_csv(args.input, 
+                skiprows=2, sep='\s+', engine="python", header=None,
+                names=["step","rmse_val","rmse_trn",
+                    "rmse_e_val","rmse_e_trn",
+                    "rmse_f_val","rmse_f_trn",
+                    "lr"])
+        xmin = args.xmin
+        if args.xmax:
+            xmax = args.xmax
+        else:
+            xmax = max(data.epoch)
+        
+        data = data[xmin:(xmax+1)]
+
+        fix, ax = plt.subplots(nrows=2, ncols=2, tight_layout=True, figsize=(10,8))
+
+        ax[0,0].plot(data['step'], data['rmse_trn']*1000, label="Training", alpha=0.7)
+        ax[0,0].plot(data['step'], data['rmse_val']*1000, label="Validation", alpha=0.7)
+        ax[0,0].legend(frameon=False)
+        ax[0,0].set_xlabel('Step')
+        ax[0,0].set_ylabel('RMSE Total')
+        if args.log:
+            ax[0,0].set_yscale('log')
+        ax[0,0].set_title('RMSE Total', fontweight="bold")
+        ax[0,0].grid()
+
+        ax[0,1].plot(data['step'], data['lr'], label="Learning Rate")
+        if args.log:
+            ax[0,1].set_yscale('log')
+        ax[0,1].set_xlabel('Step')
+        ax[0,1].set_ylabel('Learning Rate')
+        ax[0,1].set_title('Learning Rate', fontweight="bold")
+        ax[0,1].grid()
+
+        ax[1,0].plot(data['step'], data['rmse_e_trn']*1000, label="Training", alpha=0.7)
+        ax[1,0].plot(data['step'], data['rmse_e_val']*1000, label="Validation", alpha=0.7)
+        ax[1,0].legend(frameon=False)
+        if args.log:
+            ax[1,0].set_yscale('log')
+        ax[1,0].set_xlabel('Step')
+        ax[1,0].set_ylabel('RMSE Energy [meV/Å]')
+        ax[1,0].set_title('RMSE Energy', fontweight="bold")
+        ax[1,0].grid()
+
+        ax[1,1].plot(data['step'], data['rmse_f_trn']*1000, label="Training", alpha=0.7)
+        ax[1,1].plot(data['step'], data['rmse_f_val']*1000, label="Validation", alpha=0.7)
+        ax[1,1].legend(frameon=False)
+        ax[1,1].set_xlabel('Step')
+        if args.log:
+            ax[1,1].set_yscale('log')
+        ax[1,1].set_ylabel('RMSE Forces [meV/atoms]')
+        ax[1,1].set_title('RMSE Forces', fontweight="bold")
+        ax[1,1].grid()
+    
+    if "learning-curve.out" in args.input:
+        colnames=["epoch","RMSEpa_Etrain_pu","RMSEpa_Etest_pu","RMSE_Ftrain_pu","RMSE_Ftest_pu"] 
+        sep = r"\s{2,}"
+        data = pd.read_table(args.input, comment='#', sep=sep, engine="python", 
+                             usecols=[0,1,2,9,10], names=colnames, header=None)
+        xmin = args.xmin
+        if args.xmax:
+            xmax = args.xmax
+        else:
+            xmax = max(data.epoch)
+        
+        data = data[xmin:(xmax+1)]
+        # if column do not contain NAN values, then rescale them
+        nans_cols=[]
+        for col in data.columns:
+            if any(data[col] == '-NAN'):
+                nans_cols.append(col)
+        if 'RMSEpa_Etrain_pu' not in nans_cols:
+            data.RMSEpa_Etrain_pu *= 1000.0*27.21138469 # meV/atom
+        if 'RMSEpa_Etest_pu' not in nans_cols:
+            data.RMSEpa_Etest_pu  *= 1000.0*27.21138469 # meV/atom
+        if 'RMSE_Ftrain_pu' not in nans_cols:
+            data.RMSE_Ftrain_pu *= 1000.0*27.21138469/0.529177 # meV/Å
+        if 'RMSE_Ftest_pu' not in nans_cols:
+            data.RMSE_Ftest_pu  *= 1000.0*27.21138469/0.529177 # meV/Å
+        
+        fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(5, 8), tight_layout=True, squeeze=False)
+        ax[0][0].set_title('Forces RMSE', fontweight="bold")
+        ax[0][0].set_xlabel('Epoch')
+        ax[0][0].set_ylabel('Force RMSE [meV/Å]')
+        ax[0][0].grid()
+        if 'RMSE_Ftrain_pu' not in nans_cols:
+            ax[0][0].plot(data.epoch, data['RMSE_Ftrain_pu'], label='Train', alpha=0.7)
+        if 'RMSE_Ftest_pu' not in nans_cols:
+            ax[0][0].plot(data.epoch, data['RMSE_Ftest_pu'], label='Validation', alpha=0.7)
+        ax[0][0].legend(frameon=False)
+        if args.log:
+            ax[0,0].set_yscale('log')
+        ax[0][0].set_xlim(left=0)
+        
+        ax[1][0].set_title('Energy RMSE', fontweight="bold")
+        ax[1][0].set_xlabel('Epoch')
+        ax[1][0].set_ylabel('Energy RMSE [meV/atom]')
+        ax[1][0].grid()
+        if 'RMSEpa_Etrain_pu' not in nans_cols:
+            ax[1][0].plot(data.epoch, data['RMSEpa_Etrain_pu'], label='Train', alpha=0.7)
+        if 'RMSEpa_Etest_pu' not in nans_cols:
+            ax[1][0].plot(data.epoch, data['RMSEpa_Etest_pu'], label='Validation', alpha=0.7)
+        ax[1][0].legend(frameon=False)
+        if args.log:
+            ax[1,0].set_yscale('log')
+        ax[1][0].set_xlim(left=0)
+
+
+    plt.savefig("LC.png", dpi=300)
+    if args.show:
+        plt.show()
+    else:
+        subprocess.run(f"imgcat LC.png", shell=True)
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs["help"] = help
+        if default is not None and args[0] != "-h":
+            kwargs["default"] = default
+            if help is not None:
+                kwargs["help"] += f"\n{orange}Default: {default}{normal}"
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{bold}{orange}Plot DeepMD or n2p2 learning curve.{normal}
+""")
+    parser.add_argument('--input', '-in',
+                    default=defaultinput,
+                    type=str, 
+                    help='Path to the learning curve file')
+    parser.add_argument('--log', '-l',
+                        default=False,
+                        action='store_true',
+                        help='Use log scale for y-axis')
+    parser.add_argument('--show', '-s',
+                        default=False,
+                        action='store_true',
+                        help='Show the interactive plot.')
+    parser.add_argument('--xmin', '-x',
+                        help    = 'Minimum x value. Remove the first epoch to zoom in on data.',
+                        type    = int,
+                        default = 1)
+    parser.add_argument('--xmax', '-X',
+                        help    = 'Maximum x value.',
+                        type    = int)
+    parser.usage = f"{orange}{parser.format_usage()[7:]}{normal}"
+    return parser
+
+
+if __name__ == "__main__":
+    """Run as a stand-alone script"""
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    

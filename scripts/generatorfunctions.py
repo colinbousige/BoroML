@@ -1,14 +1,17 @@
 """
 Set of functions to generate borophene structures on metal substrates and write LAMMPS input files for MD simulations.
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
 """
 
 import os
 import sys
 import numpy as np
 from ase import *
+from ase.build.tools import sort
 from ase.io.lammpsrun import read_lammps_dump
 from ase.io import write
-from ase.build.tools import sort
 from ase.visualize import view
 from ase.build import fcc111, fcc110, fcc100, fcc211, make_supercell, diamond100
 from ase.io.lammpsdata import Prism, convert
@@ -16,6 +19,7 @@ from pathlib import Path
 from scipy.spatial import distance
 import itertools
 import datetime
+from tqdm import tqdm
 
 metals = {'Ag': 4.0853,
           'Au': 4.112,
@@ -37,6 +41,8 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'alpha2' :(16,16,[0,18,37,55,74,92,111,7,25,44,62,65,83,102,120,139,157,113,132,150,169,187,206,160,178,197,215,234,252,208,227,245,264,282,301,319,273,292,310,329,347,366,322,368,340,359,377,396,414,387,405,424,442,461,479,417,435,482,500,454,472,491,509,271]),   #alpha2
           'alpha4' :(9,9,[0,11,23,34,37,48,60,71,97,85,74,99,111,136,122,148,134,159]), #alpha4
           'alpha5' :(2,6,[0,15]), #alpha5
+          'alpha6' :(2,3,[0]), # alpha6
+          'alpha7' :(12,8,[0,4,25,29,55,51,76,102,98,72,127,123,149,174,145,170]), # alpha7
           'delta3' :(1,3,[0,4]),  #delta3
           'delta4' :(1,2,[0]),    #delta4
           'delta5' :(7,7,[0,16,11,32,52,73,93,36,57,77,48,27,68,89]),    #delta5
@@ -62,8 +68,7 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
           'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
           'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35]),
-          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35]),
-          'noBoro':(1,2,[0,1,2,3])
+          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
@@ -111,6 +116,7 @@ def write_lammps_input(
     outPE           = False,
     outF            = False,
     velocities      = False,
+    random_velocities = True,
     nnp             = 'n2p2'):
     """ Writes a LAMMPS input file from the given parameters (for batch writing of input files)
     
@@ -172,6 +178,8 @@ def write_lammps_input(
         Save individual forces in the dump file?
     nnp             : str
         NNP type: 'n2p2' or 'deepmd'
+    random_velocities : logical
+        Create initial random velocities for the atoms?
     """
     os.makedirs(os.path.dirname(outputfile), exist_ok=True)
     if len(ts)!=len(damp) or len(ts)!=len(runtime) or len(damp)!=len(runtime):
@@ -210,6 +218,7 @@ dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
+fix_modify     md{jobname} temp mytemp
 {mymd}
 run            {N}
 unfix          md{jobname}
@@ -226,6 +235,7 @@ dump_modify    dmp{jobname} flush yes sort id element B {substrate}
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
+fix_modify  md{jobname} temp mytemp
 {mymd}
 run         {N}
 unfix       md{jobname}
@@ -261,6 +271,8 @@ pair_coeff * * B {substrate}"""
         writeT2=f"""
 # Very final temperature (K)
 variable T2          equal {T2}"""
+    MDrun = f"""# Create initial velocities
+velocity       {moving} create ${{T0}} {seed}\n{MDrun}""" if random_velocities else MDrun
     f.write(f"""#−−−−−−−−−−−−−−−−−−− Parameters −−−−−−−−−−−−−−−−−−−
 # Input structure file
 variable inputfile   string {inputfile}
@@ -300,14 +312,13 @@ group      mobile subtract all fixedlayer
 
 #−−−−−−−−−−−−−−−−−−−− Output −−−−−−−−−−−−−−−−−−−−−−
 compute        mytemp {moving} temp # the temperature is computed on moving atoms only
-thermo_style   custom step c_mytemp ke pe etotal press lx ly lz
+thermo_style   custom step temp ke pe etotal press lx ly lz
 thermo_modify  norm yes # extensive quantities will be normalized per atom
+thermo_modify  temp mytemp
 thermo         ${{thermoprint}}
 {"compute        pe all pe/atom" if outPE else '' }
 {mini}
 #−−−−−−−−−−−−−−−−−−−− MD Run ---−−−−−−−−−−−−−−−−−−−
-# Create initial velocities
-velocity       {moving} create ${{T0}} {seed}
 {MDrun}
 
 print \"Job done.\"
@@ -358,6 +369,15 @@ def write_lammps_slurm_job(jobname="my_job", node="node24", N=0, workingpath="~/
     elif node == "l-node07":
         queue = "f24"
         nproc = 64
+    elif node == "l-node08":
+        queue = "f24"
+        nproc = 128
+    elif node == "l-node09":
+        queue = "f24"
+        nproc = 128
+    elif node == "l-node10":
+        queue = "f24"
+        nproc = 128
     elif node == "node23":
         queue = "tc2"
         nproc = 40
@@ -437,21 +457,11 @@ LAMMPS="/home/pmignon/bin/LAMMPS_OMP/lammps-2Aug2023/src/lmp_mpi"
 
 """)
     if full==True or append==True:
-        # create a new directory for the job with the jobname and current date and time
-        ct = f"{datetime.datetime.now()}".replace(" ", "_")
-        mydir = f"{jobname}_{os.path.basename(workingpath)}_{ct}"
         f.write(f"""
-echo \"Working on: {workingpath}\"
-mkdir -p /scratch/$USER/{mydir} || exit 1
-cd /scratch/$USER/{mydir}
 PAT=\"{workingpath}\"
-cp $PAT/input.lmp .
-cp $PAT/*.data .
-cp $PAT/input.nn .
-cp $PAT/*.db .
-mpirun -np {nppt} $LAMMPS < $PAT/input.lmp > $PAT/lammps.out
-cp -p *.lammpstrj $PAT
-cp -p *log* $PAT
+echo \"Working on: $PAT\"
+cd $PAT
+mpirun -np {nppt} $LAMMPS < input.lmp > lammps.out
 
 """)
     f.close()
@@ -564,7 +574,12 @@ def create_structure(
     NsolubleB=0,
     dilate=1.2,
     toplayer:Atoms=None,
-    randshifttop=0
+    randshifttop=0,
+    stacking='AA',
+    stackshiftx=0,
+    stackshifty=0,
+    randB=0,
+    randBdist=2.0
     ):
     """Create a borophene structure on a substrate
     
@@ -623,6 +638,14 @@ def create_structure(
         Rotation of the borophene island (in degrees) with respect to the borophene structure
     randshifttop: float
         Add random shift to the top layer of the substrate
+    stacking : str
+        Stacking of the borophene layers ('AA' or 'AB')
+    stackshiftx, stackshifty : float
+        Shift the borophene layers by (stackshiftx, stackshifty) in Angstrom
+    randB: int
+        Insert random B atoms on the surface separated by randBdist at minimum.
+    randBdist: float
+        Minimum distance between random B atoms.
     """
     # # # # # # # # # 
     # Create borophene polymorph
@@ -859,33 +882,41 @@ def create_structure(
                 MIN = 0
         struct = randstruct.copy()
     # Add supplementary layers of borophene if any
+    if stacking=='AA':
+        xshift, yshift = 0, 0
+    if stacking=='AB':
+        xshift, yshift = stackshiftx*aa/2, stackshifty*bb/2
     if Nboro > 1:
         # if no defined toplayer, add same layer on top of the first one
+        Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+        boro = struct.copy()[Bid]
         if toplayer is None:
             added = 1
-            Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
-            boro = struct.copy()[Bid]
             while added < Nboro:
-                boro.positions[:,2] += vdwdist
+                added += 1
+                boroi = boro.copy()[Bid]
+                boroi.positions[:,0] += xshift * ((added-1)%2)
+                boroi.positions[:,1] += yshift * ((added-1)%2)
+                boroi.positions[:,2] += vdwdist * (added-1)
                 if randshifttop>0:
                     xx, yy = random_vector(dim=2)*randshifttop
-                    boro.positions[:,0] += xx
-                    boro.positions[:,1] += yy
-                struct = boro + struct
-                added += 1
+                    boroi.positions[:,0] += xx
+                    boroi.positions[:,1] += yy
+                struct += boroi
         # if top layer is defined, make previous layers all the same and the top layer different
         if toplayer is not None:
             added = 1
-            Bid  = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
-            boro = struct.copy()[Bid]
             while added < Nboro - 1:
-                boro.positions[:,2] += vdwdist
+                added += 1
+                boroi = boro.copy()[Bid]
+                boroi.positions[:,0] += xshift * ((added-1)%2)
+                boroi.positions[:,1] += yshift * ((added-1)%2)
+                boroi.positions[:,2] += vdwdist * (added-1)
                 if randshifttop>0:
                     xx, yy = random_vector(dim=2)*randshifttop
-                    boro.positions[:,0] += xx
-                    boro.positions[:,1] += yy
-                struct = boro + struct
-                added += 1
+                    boroi.positions[:,0] += xx
+                    boroi.positions[:,1] += yy
+                struct += boroi
             # add top layer
             maxZ = max(struct.positions[:,2])
             toplayer.positions[:,2] = maxZ + vdwdist
@@ -896,6 +927,8 @@ def create_structure(
             struct += toplayer
     # Sort atoms to have B first
     struct = sort(struct, tags = struct.get_masses())
+    # wrap atoms in the cell
+    struct.wrap()
     # Shift borophene position with respect to substrate
     Bid = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
     if np.abs(shiftX) > 0:
@@ -910,14 +943,29 @@ def create_structure(
     if glimpse:
         view(struct)
     struct.pbc = [1,1,1]
+    if randB>0:
+        Bid = [i for i,at in enumerate(struct.get_chemical_symbols()) if at=='B']
+        del struct[Bid]
+        cella = slab.cell[0, 0]
+        cellb = slab.cell[1, 1]
+        z = np.max(struct.positions[:,2])+2.45
+        for i in tqdm(range(randB)):
+            MIN = 0
+            while(MIN < randBdist):
+                randstruct = struct.copy()
+                x = np.random.uniform(0, cella, 1)[0]
+                y = np.random.uniform(0, cellb, 1)[0]
+                randstruct += Atoms('B', positions=[[x,y,z]])
+                MIN = mindist(randstruct)
+            struct = randstruct.copy()
     return(struct)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def write_lammps(name, atoms,
-                 units="real",
-                 atom_style='atomic', comments=''):
+                 units="metal",
+                 atom_style='atomic', comments='', velocities:np.ndarray=None):
     """Write atomic structure data to a LAMMPS data file.
     #### Parameters
     name      : str
@@ -928,6 +976,8 @@ def write_lammps(name, atoms,
         LAMMPS units style
     atom_style: str
         LAMMPS atom style
+    velocities: array (N by 3)
+        In case we want to add a initial velocities to the structure.
     """
     if name==None:
         fd = sys.stdout
@@ -953,8 +1003,11 @@ def write_lammps(name, atoms,
     fd.write("{0} \t atoms \n".format(n_atoms))
 
     species = set(symbols)
-    species.remove('B')
-    species = ['B'] + sorted(species)
+    if 'B' in species:
+        species.remove('B')
+        species = ['B'] + sorted(species)
+    else:
+        species = sorted(species)
     n_atom_types = len(species)
     fd.write("{0}  atom types\n".format(n_atom_types))
 
@@ -1048,6 +1101,24 @@ def write_lammps(name, atoms,
     else:
         raise NotImplementedError
 
+    if type(velocities) == np.ndarray :
+        if velocities.shape[0] == len(atoms) : 
+        # atom_style is atomic by default 
+        # velocity in metal unit in lammps : Angstroms/picosecond
+        # see: https://docs.lammps.org/units.html
+        # in vasp : Angstroms/femtosecond
+            
+            fd.write("\n\nVelocities \n\n")
+            
+            for i,(vx, vy, vz) in enumerate(velocities):
+
+                #element = list(species).index(atoms[i].symbol) + 1
+
+                fd.write("{0:>6} {1:23.17g} {2:23.17g} {3:23.17g}\n".format(i+1, vx, vy, vz))
+    
+        else:
+            raise ValueError(f"Dimenssion missmatch. velocities must have shape of {len(atoms)} by 3." )
+
     fd.flush()
     if fd is not sys.stdout:
         fd.close()
@@ -1114,3 +1185,4 @@ for island in islands.keys():
     Bid  = [i for i,at in enumerate(boron.get_chemical_symbols()) if at=='B']
     boron = boron[Bid]
     islands[island] = boron
+

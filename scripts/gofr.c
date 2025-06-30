@@ -30,14 +30,20 @@
 #define MAX(a,b) (a>b ? a : b)
 #define PI 3.14159265359
 #define SIGN(x)  ((x > 0) ? 1 : ((x < 0) ? -1 : 0))
+#define sqr(a)  (a)*(a)
 
 char * read_line (char const * const s_filename, unsigned int i_line_num, char ligne[500]);
 int nb_lines (char const * const s_filename);
-double Dist(double xlo,double xhi,double ylo,double yhi,double zlo,double zhi, 
+double Dist(double a,double b,double c,double alpha,double beta,double gamma, 
             double point1, double point2, double point3, double pos1, double pos2, double pos3);
 void progressbar(const char *message, int i, int N, int Nchar);
 int in(char **arr, int len, char *target);
 int which(char **arr, int len, char *target);
+void cart2red(double a,double b,double c,double alpha,double beta,double gamma,double x,double y,double z,double *u,double *v,double *w);
+void red2cart(double a,double b,double c,double alpha,double beta,double gamma,double u,double v,double w,double *x,double *y,double *z); 
+void lammps2cell(double xlo,double ylo,double zlo,double xhi,double yhi,double zhi,double xy,double xz,double yz,double *a,double *b,
+                 double *c,double *alpha,double *beta,double *gamma);
+
 
 int main(int Narg, char **argv){
     // Default values
@@ -47,8 +53,10 @@ int main(int Narg, char **argv){
     // Other variables
     int i, j, k, l, m, n, N, Nbin, N1 = 0, N2 = 0, id;
     int Nimages, conf, head=9, Ntype=1, exists=0, ti, tj;
-    double a, x, y, z,r, charge;
-    double xlo,xhi,ylo,yhi,zlo,zhi;
+    double x, y, z,r, charge;
+    double xlo,xhi,ylo,yhi,zlo,zhi,xy,xz,yz;
+    double a,b,c,alpha,beta,gamma;
+    double u,v,w;
     char text[100], input[100], ligne[500];
     char toprint[30], attyp[3], typex[3], trash[10];
     char **typelist = malloc(100 * sizeof(char*));
@@ -181,28 +189,51 @@ int main(int Narg, char **argv){
             }
         }
         fgets(ligne, sizeof(ligne), fp);
-        fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&xlo,&xhi);
-        fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&ylo,&yhi);
-        fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&zlo,&zhi);
-        fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%s %s %s %s %s",trash,trash,trash,trash,typex);
-        Vtot = (xhi - xlo) * (yhi - ylo) * (zhi - zlo);
+        if(strstr(ligne,"ITEM: BOX BOUNDS xy xz yz pp pp pp")) {
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf %lf",&xlo,&xhi,&xy);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf %lf",&ylo,&yhi,&xz);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf %lf",&zlo,&zhi,&yz);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%s %s %s %s %s",trash,trash,trash,trash,typex); 
+            lammps2cell(xlo,ylo,zlo,xhi,yhi,zhi,xy,xz,yz,&a,&b,&c,&alpha,&beta,&gamma);
+            Vtot = a*b*c*sqrt(1-sqr(cos(alpha))-sqr(cos(beta))-sqr(cos(gamma))+2*cos(alpha)*cos(beta)*cos(gamma));
+        }
+        else {
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&xlo,&xhi);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&ylo,&yhi);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%lf %lf",&zlo,&zhi);
+            fgets(ligne, sizeof(ligne), fp); sscanf(ligne,"%s %s %s %s %s",trash,trash,trash,trash,typex);
+            a = (xhi - xlo);
+            b = (yhi - ylo);
+            c = (zhi - zlo);
+            alpha = 0.5 * PI;
+            beta = 0.5 * PI;
+            gamma = 0.5 * PI;
+            Vtot = (xhi - xlo) * (yhi - ylo) * (zhi - zlo);
+        } 
+        
+        if (Rmax > MIN(a, MIN(b, c))/2.+dr){
+            // fprintf(stderr, "Rmax is too large, setting it to %.2lf\n", MIN(a, MIN(b, c))/2.+dr);fflush(stderr);
+            Rmax = MIN(a, MIN(b, c))/2.+dr;
+        }
+
         Vmean += Vtot/Nimages;
 
         i = 0;
         Ni= calloc(Ntype, sizeof(int));
-        // Reading image
+        // Reading image coordinates in atom[i], work with reduced coordinates !
         while(i<N){
             fgets(ligne, sizeof(ligne), fp);
             sscanf(ligne,"%d %s %lf %lf %lf",&id,attyp,&x,&y,&z);
             if (!strcmp(typex, "x")){
+                cart2red(a, b, c, alpha, beta, gamma, x, y, z, &u, &v, &w);
+                atom[i][0] = u;
+                atom[i][1] = v;
+                atom[i][2] = w;
+            }
+            if (!strcmp(typex, "xs")){
                 atom[i][0] = x;
                 atom[i][1] = y;
                 atom[i][2] = z;
-            }
-            if (!strcmp(typex, "xs")){
-                atom[i][0] = x*fabs(xhi-xlo);
-                atom[i][1] = y*fabs(yhi-ylo);
-                atom[i][2] = z*fabs(zhi-zlo);
             }
             type[i] = which(typelist, Ntype, attyp);
             Ni[type[i]]++;
@@ -215,9 +246,12 @@ int main(int Narg, char **argv){
             for (i = 0; i < Ntype; i++){
                 fprintf(stderr, "   Type %d = %s (%d)\n", i + 1, typelist[i], Ni[i]);fflush(stderr);
             }
-            fprintf(stderr,"\033[1;31mBox size:\n\033[0m   a = %.3lf\n", fabs(xhi-xlo));fflush(stderr);
-            fprintf(stderr,"   b = %.3lf\n", fabs(yhi-ylo));fflush(stderr);
-            fprintf(stderr,"   c = %.3lf\n", fabs(zhi-zlo));fflush(stderr);
+            fprintf(stderr,"\033[1;31mBox size:\n\033[0m   a = %.3lf\n", a);fflush(stderr);
+            fprintf(stderr,"   b = %.3lf\n", b);fflush(stderr);
+            fprintf(stderr,"   c = %.3lf\n", c);fflush(stderr);
+            fprintf(stderr,"   alpha = %.3lf\n", alpha);fflush(stderr);
+            fprintf(stderr,"   beta = %.3lf\n", beta);fflush(stderr);
+            fprintf(stderr,"   gamma = %.3lf\n", gamma);fflush(stderr);
             fprintf(stderr, "\n");fflush(stderr);
             if(Zproj==1){fprintf(stderr, "Computing \033[1;31mz-density\033[0m.\n");fflush(stderr);}
             if(Zproj==0){
@@ -234,7 +268,10 @@ int main(int Narg, char **argv){
             if (Zproj == 0){ // "regular" radial distance
                 for(j=0;j<N;j++){
                     if( i==j ) continue;
-                    x = Dist(xlo, xhi, ylo, yhi, zlo, zhi,
+//
+// Dist(double a,double b,double c,double alpha,double beta,double gamma,double point1, double point2, double point3, double pos1, double pos2, double pos3)
+//
+                    x = Dist(a, b, c, alpha, beta, gamma,
                             atom[i][0], atom[i][1], atom[i][2],
                             atom[j][0], atom[j][1], atom[j][2]);
                     l = (int) (x*invstep);
@@ -324,7 +361,9 @@ int main(int Narg, char **argv){
                 }}
                 fprintf(stdout, "\n");fflush(stdout);
             } else {
-                fprintf(stdout, "%.6lf,%.6lf", dr * l + dr / 2., count[l]); fflush(stdout);
+                if (dr * l + dr / 2. < Rmax){
+                    fprintf(stdout, "%.6lf,%.6lf", dr * l + dr / 2., count[l]); fflush(stdout);
+                }
                 if(Zproj==1){
                     for(i=0;i<Ntype;i++){
                         fprintf(stdout, ",%.6lf", countij[i][0][l]); fflush(stdout);
@@ -349,33 +388,37 @@ int main(int Narg, char **argv){
             fprintf(stdout, "%s,%s,%s,%s\n", "r", "elements", "G(r)", "integral");
             fflush(stdout);
             for(l=0;l<Nbin;l++){
-                if(l==0){
-                    for(i=0;i<Ntype;i++){for(j=i;j<Ntype;j++){
-                        sprintf(toprint, "%s%s", typelist[i], typelist[j]);
-                        fprintf(stdout, "%lf,%s,%lf,%lf\n", 
-                                dr * l + dr / 2., 
-                                toprint,
-                                0.0, 
-                                0.0); 
-                    }}
-                } else {
-                    fprintf(stdout, "%lf,%s,%lf,%lf\n",
-                            dr * l + dr / 2.,
-                            "total",
-                            count[l],
-                            integ[l]);
-                    fflush(stdout);
-                    for(i=0;i<Ntype;i++){
-                        for(j=i;j<Ntype;j++){
-                        sprintf(toprint, "%s%s", typelist[i], typelist[j]);
+                if (dr * l + dr / 2. < Rmax){
+                    if(l==0){
+                        for(i=0;i<Ntype;i++){for(j=i;j<Ntype;j++){
+                            sprintf(toprint, "%s%s", typelist[i], typelist[j]);
+                            fprintf(stdout, "%lf,%s,%lf,%lf\n", 
+                                    dr * l + dr / 2., 
+                                    toprint,
+                                    0.0, 
+                                    0.0); 
+                        }}
+                    } else {
                         fprintf(stdout, "%lf,%s,%lf,%lf\n",
                                 dr * l + dr / 2.,
-                                toprint,
-                                countij[i][j][l],
-                                integij[i][j][l]);
+                                "total",
+                                count[l],
+                                integ[l]);
                         fflush(stdout);
+                        for(i=0;i<Ntype;i++){
+                            for(j=i;j<Ntype;j++){
+                            sprintf(toprint, "%s%s", typelist[i], typelist[j]);
+                            fprintf(stdout, "%lf,%s,%lf,%lf\n",
+                                    dr * l + dr / 2.,
+                                    toprint,
+                                    countij[i][j][l],
+                                    integij[i][j][l]);
+                            fflush(stdout);
+                            }
                         }
                     }
+                }else{
+                    break;
                 }
             }
         }
@@ -464,20 +507,6 @@ int nb_lines (char const * const s_filename){
 }
 
 
-double Dist(double xlo,double xhi,double ylo,double yhi,double zlo,double zhi, 
-            double point1, double point2, double point3, double pos1, double pos2, double pos3){
-    double Dx,Dy,Dz;
-    
-        Dx = point1 - pos1;
-        Dy = point2 - pos2;
-        Dz = point3 - pos3;
-        if (fabs(Dx) > (xhi-xlo) * 0.5) Dx = Dx - fabs(xhi-xlo)*SIGN(Dx);
-        if (fabs(Dy) > (yhi-ylo) * 0.5) Dy = Dy - fabs(yhi-ylo)*SIGN(Dy);
-        if (fabs(Dz) > (zhi-zlo) * 0.5) Dz = Dz - fabs(zhi-zlo)*SIGN(Dz);
-        
-    return sqrt( Dx*Dx + Dy*Dy + Dz*Dz );
-}
-
 void progressbar(const char *message, int i, int N, int Nchar)
 {
     float percentage = (i + 1.) / N * 100;
@@ -514,4 +543,60 @@ int which(char **arr, int len, char *target)
         }
     }
     return 0;
+}
+
+void cart2red(double a,double b,double c,double alpha,double beta,double gamma,double x,double y,double z,double *u,double *v,double *w) {
+    double omega;
+    omega=a*b*c*sqrt(1-sqr(cos(alpha))-sqr(cos(beta))-sqr(cos(gamma))+2*cos(alpha)*cos(beta)*cos(gamma));
+    *u=x/a-y*cos(gamma)/(a*sin(gamma))+z*b*c*(cos(alpha)*cos(gamma)-cos(beta))/(omega*sin(gamma));
+    *v=y/(b*sin(gamma))+z*a*c*(cos(beta)*cos(gamma)-cos(alpha))/(omega*sin(gamma));
+    *w=z*a*b*sin(gamma)/omega;
+}
+
+void red2cart(double a,double b,double c,double alpha,double beta,double gamma,double u,double v,double w,double *x,double *y,double *z) {
+    double omega;
+    omega=a*b*c*sqrt(1-sqr(cos(alpha))-sqr(cos(beta))-sqr(cos(gamma))+2*cos(alpha)*cos(beta)*cos(gamma));
+    *x=u*a+v*b*cos(gamma)+w*c*cos(beta);
+    *y=v*b*sin(gamma)+w*c*(cos(alpha)-cos(beta)*cos(gamma))/(sin(gamma));
+    *z=w*omega/(a*b*sin(gamma));
+}
+
+void lammps2cell(double xlo,double ylo,double zlo,double xhi,double yhi,double zhi,double xy,double xz,double yz,double *a,double *b,double *c,double *alpha,double *beta,double *gamma) {
+    double lx,ly,lz,cosalpha,cosbeta,cosgamma;
+    lx = xhi - xlo;
+    ly = yhi - ylo;
+    lz = zhi - zlo;
+    *a = lx;
+    *b = sqrt ( sqr(ly) + sqr(xy) );
+    *c = sqrt ( sqr(lz) + sqr(xz) + sqr(yz) );
+    cosalpha = ( xy * xz + ly * yz ) / ( *b * *c );
+    *alpha = acos( cosalpha ) ;
+    cosbeta = xz / *c ;
+    *beta = acos( cosbeta );
+    cosgamma = xy / *b ;
+    *gamma = acos( cosgamma );
+}
+
+
+double Dist(double a,double b,double c,double alpha,double beta,double gamma, 
+            double pt1x, double pt1y, double pt1z, double pt2x, double pt2y, double pt2z)
+{
+    double distx,disty,distz,atom2X,atom2Y,atom2Z,dist;
+    double pc1x,pc1y,pc1z,pc2x,pc2y,pc2z;
+    distx = pt2x - pt1x;
+    disty = pt2y - pt1y;
+    distz = pt2z - pt1z;
+    atom2X = pt2x;
+    atom2Y = pt2y;
+    atom2Z = pt2z;
+    if(distx>0.5){atom2X = pt1x-1.0;}
+    if(distx<-0.5){atom2X = pt1x+1.0;}
+    if(disty>0.5){atom2Y = pt1y-1.0;}
+    if(disty<-0.5){atom2Y = pt1y+1.0;}
+    if(distz>0.5){atom2Z = pt1z-1.0;}
+    if(distz<-0.5){atom2Z = pt1z+1.0;}
+    red2cart(a,b,c,alpha,beta,gamma,pt1x,pt1y,pt1z,&pc1x,&pc1y,&pc1z);
+    red2cart(a,b,c,alpha,beta,gamma,atom2X,atom2Y,atom2Z,&pc2x,&pc2y,&pc2z);
+    dist=sqrt(sqr(pc1x-pc2x)+sqr(pc1y-pc2y)+sqr(pc1z-pc2z));
+    return dist;
 }

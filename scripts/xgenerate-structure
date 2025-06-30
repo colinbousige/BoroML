@@ -2,6 +2,9 @@
 
 """
 Create a file for one structure with the given parameters. Output to stdout.
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
 """
 
 from generatorfunctions import *
@@ -56,7 +59,12 @@ def main(args):
     island_rotate = args.island_rotate
     NsoluB        = args.NsoluB
     soluDilate    = args.soluDilate
-    toplayer      = args.toplayer
+    toplayer      = str(args.toplayer)
+    stacking      = args.stacking
+    stackshifty   = args.stackshifty
+    stackshiftx   = args.stackshiftx
+    randB         = args.randB
+    randBdist     = args.randBdist
     
     if island_size > 0 and island_shape not in ['circle', 'square', 'triangle', 'hexagon']:
         raise ValueError(f"\n{bold}{orange}Unknown island shape: {island_shape}{normal}\n")
@@ -95,7 +103,12 @@ def main(args):
             island_rotate= island_rotate,
             NsolubleB   = NsoluB,
             dilate      = soluDilate,
-            toplayer    = islands[toplayer] if toplayer.lower() in islands.keys() else None
+            toplayer    = islands[toplayer] if toplayer.lower() in islands.keys() else None,
+            stacking    = stacking,
+            stackshifty = stackshifty,
+            stackshiftx = stackshiftx,
+            randB       = randB,
+            randBdist   = randBdist
         )
     nometal = create_structure(
             nx          = predef[allotrope][0], 
@@ -182,6 +195,9 @@ def main(args):
 - Base cell without subs. : {unit_nometal.get_cell()[0][0]:<7.5f} x {unit_nometal.get_cell()[1][1]:7.5f} Å
 - Supercell without subs. : {nometal.get_cell()[0][0]:7.5f} x {nometal.get_cell()[1][1]:7.5f} Å
 - Distorsion              : {(struc.get_cell()[0][0]-nometal.get_cell()[0][0])/nometal.get_cell()[0][0]*100:.2f} x {(struc.get_cell()[1][1]-nometal.get_cell()[1][1])/nometal.get_cell()[1][1]*100:.2f} %
+- stacking                : {stacking}
+- stackshiftx             : {stackshiftx} Å
+- stackshifty             : {stackshifty} Å
 
 """)
     if substrate != 'None':
@@ -195,10 +211,10 @@ def main(args):
 
 """)
     if island_size > 0 :
-        sys.stderr.write(f"- Island size   : {island_size} Å\n")
-        sys.stderr.write(f"- Island shape  : {island_shape}\n")
-        sys.stderr.write(f"- Island angle  : {island_angle}\n\n")
-        sys.stderr.write(f"- Island roation: {island_rotate}\n\n")
+        sys.stderr.write(f"- Island size    : {island_size} Å\n")
+        sys.stderr.write(f"- Island shape   : {island_shape}\n")
+        sys.stderr.write(f"- Island angle   : {island_angle}\n\n")
+        sys.stderr.write(f"- Island rotation: {island_rotate}\n\n")
     if args.glimpse:
         view(struc)
 
@@ -316,6 +332,26 @@ def get_parser():
                         help    = f"Top layer of the substrate to consider. If not provided, all layers are the same. Must be one of {['None']+[k for k in islands.keys()]}",
                         type    = str,
                         default = None)
+    parser.add_argument('--stacking', '-stack',
+                        help    = f"Stacking of the borophene layers ('AA' or 'AB')",
+                        type    = str,
+                        default = 'AA')
+    parser.add_argument('--stackshiftx', '-shiftx',
+                        help    = f"Shift the borophene layers by stackshiftx in Angstrom",
+                        type    = float,
+                        default = 0.0)
+    parser.add_argument('--stackshifty', '-shifty',
+                        help    = f"Shift the borophene layers by stackshifty in Angstrom",
+                        type    = float,
+                        default = 0.0)
+    parser.add_argument('--randB', '-randB',
+                        help    = f"Add `randB` random B atoms at the surface.",
+                        type    = int,
+                        default = 0)
+    parser.add_argument('--randBdist', '-randBdist',
+                        help    = f"Minimum distance between random B atoms (Å).",
+                        type    = float,
+                        default = 2.0)
 
     parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
     return parser

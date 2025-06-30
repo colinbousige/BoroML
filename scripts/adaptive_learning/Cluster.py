@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import subprocess
 from tabulate import tabulate
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 def pprint_df(dframe):
@@ -34,9 +35,9 @@ class Cluster:
     >>> lynx = Cluster()
     >>> lynx.get_free_nodes()
     NodeName  CPUTot  CPUAlloc  CPUFree Partitions  State
-    node33      96         0       96        tc3   IDLE
-    node32      40         0       40        tc2   IDLE
-    node38     128       102       26        tc5  MIXED
+    node33      96         0       96        tc3     IDLE
+    node32      40         0       40        tc2     IDLE
+    node38     128       102       26        tc5    MIXED
     """
     
     def __init__(self, 
@@ -116,9 +117,9 @@ CLUSTER STATE ──────────────────────
             time.sleep(5) # wait for previouly submitted job to maybe be able to run
         self.state = state = self.get_state()
         oknodes = ['MIXED', 'IDLE']
-        state = state[~state.NodeName.isin(self.forbid_nodes)]
-        state = state[~state.Partitions.isin(self.forbid_queues)]
-        statefree = state[state.State.isin(oknodes)].sort_values(
+        state = state[~state.NodeName.isin(self.forbid_nodes)] # remove forbidden nodes
+        state = state[~state.Partitions.isin(self.forbid_queues)] # remove forbidden queues
+        statefree = state[state.State.isin(oknodes)].sort_values( # sort by free CPUs
                             by = ['CPUFree'], ascending = False)
         return(statefree)
     

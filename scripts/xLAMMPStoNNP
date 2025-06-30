@@ -2,6 +2,9 @@
 
 """
 Get all LAMMPS structures within a `tests/` folder, and gather them in `stock.data`
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
 """
 
 from generatorfunctions import *
@@ -68,7 +71,7 @@ Working directory: {base_path}/
 
 """)
     
-    for traj in traj_files:
+    for traj in np.sort(traj_files):
         atoms = read_lammps_dump(traj, index = slice(0, ReadMax))
         New = 0
         Nfolders += 1

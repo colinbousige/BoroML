@@ -1,0 +1,71 @@
+#−−−−−−−−−−−−−−−−−−− Parameters −−−−−−−−−−−−−−−−−−−
+# Input structure file
+variable inputfile   string structure.data
+# Initial temperature (K)
+variable T0          equal 300
+# Final temperature (K)
+variable T1          equal 300
+# Pressure (atm)
+variable P           equal 1.01325
+# Dump every dumptime
+variable dumptime    equal 200
+# Print thermo every
+variable thermoprint equal 1000
+# Output trajectory file name
+variable dumpname    string alpha-${T0}K-${T1}K
+# NNP
+variable nnpCutoff   equal  6.36
+variable nnpDir      string "../../potential/DeePMD/"
+
+#−−−−−−−−−−−−−−−−−−− Initialize −−−−−−−−−−−−−−−−−−−
+processors * * *
+units      metal
+boundary   p p p
+atom_style atomic
+
+#−−−−−−−−−−−−−−−−−−− Input −−−−−−−−−−−−−−−−−−−-----
+read_data  ${inputfile} # read input structure
+replicate  1 1 1 # make supercell
+group      borophene type 1
+group      substrate type 2
+region     regfixedlayer block INF INF INF INF INF 0.5 # define region where atoms are fixed
+group      fixedlayer region regfixedlayer
+group      mobile subtract all fixedlayer
+
+#−−−−−−−−−−−−−−−−−−− Potential -−−−−−−−−−−−−−−−−−−−
+pair_style deepmd 'graph.pb'
+pair_coeff * * B Ag
+
+#−−−−−−−−−−−−−−−−−−−− Output −−−−−−−−−−−−−−−−−−−−−−
+compute       mytemp mobile temp # the temperature is computed on moving atoms only
+thermo_style  custom step temp ke pe etotal press lx ly lz
+thermo_modify temp mytemp
+thermo_modify norm yes # extensive quantities will be normalized per atom
+thermo        ${thermoprint}
+compute       pe all pe/atom
+
+#−−−−−−−−−−−−−−−−−−−− MD Run ---−−−−−−−−−−−−−−−−−−−
+# Create initial velocities
+velocity   mobile create ${T0} 123456
+
+#------- Thermalization -------
+timestep    0.001
+dump        dmpequil all custom 100 ${dumpname}_equil.lammpstrj id element x y z
+dump_modify dmpequil flush yes sort id element B Ag
+fix         mdequil mobile nvt temp ${T0} ${T0} $(100.0*dt)
+run         500000
+unfix       mdequil
+undump      dmpequil
+
+#------- Production -------
+reset_timestep 0
+timestep    0.001
+dump        dmpprod all custom ${dumptime} ${dumpname}_prod.lammpstrj id element x y z
+dump_modify dmpprod flush yes sort id element B Ag
+fix         mdprod mobile nve
+run         1000000
+unfix       mdprod
+undump      dmpprod
+
+print "Job done."
+

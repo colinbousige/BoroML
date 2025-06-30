@@ -44,6 +44,7 @@ echo "#!/bin/bash
 export OMP_NUM_THREADS=1
 export PATH=\$PATH:\$HOME/anaconda3/bin
 export PYTHONPATH=\$PYTHONPATH:\$HOME/Boro_ML/bin
+export VASP_PP_PATH=\$HOME/Boro_ML/bin/inputs_VASP
 PYTHONBIN=\$HOME/anaconda3/bin/python
 
 PAT=$PAT

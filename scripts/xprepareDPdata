@@ -1,0 +1,184 @@
+#!/usr/local/bin/python3
+
+"""
+Prepare the training and validation datasets for DeepMD training from n2p2's input.data file.
+This script splits the input.data file into multiple files, each containing a section of the data, and converts them into the DeepMD format.
+It also generates an input.json file for DeepMD training.
+This script can be run from the command line or imported as a module.
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License.
+"""
+
+
+import dpdata
+import numpy as np
+from tqdm import tqdm
+import sys
+import subprocess
+import os
+from glob import glob
+import argparse
+
+orange = "\033[93m"
+bold   = "\033[1m"
+normal = "\033[0m"
+
+def create_files_from_text(filename, output_dir='.'):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(filename, 'r') as file:
+        content = file.readlines()
+    file_index = 1
+    in_section = False
+    current_section = []
+    for line in tqdm(content):
+        if line.strip() == 'begin':
+            in_section = True
+            current_section = ['begin\n']
+        elif line.strip() == 'end':
+            in_section = False
+            current_section.append('end\n')
+            with open(f'{output_dir}/input{file_index}.data', 'w') as output_file:
+                output_file.writelines(current_section)
+            file_index += 1
+        elif in_section:
+            current_section.append(line)
+
+def create_multisystem(folder='inputs', ratio=0.1, outfolders=['training_data', 'validation_data']):
+    ms = dpdata.MultiSystems()
+    flist = glob(f'{folder}/*.data')
+    for file in tqdm(flist):
+        ms.append(dpdata.LabeledSystem(file_name = file, fmt = 'n2p2'))
+    if ratio<1:
+        # Division of multisystem in 0.9 train, 0.1 valid
+        train, valid, dummy = ms.train_test_split(ratio, 123456) 
+        # Conversion of multi-system to deepmd-npy format
+        train.to_deepmd_npy(outfolders[0]) 
+        valid.to_deepmd_npy(outfolders[1])
+        print(train)
+        print(valid)
+    else:
+        ms.to_deepmd_npy(outfolders[0])
+        print(ms)
+
+
+def main(args):
+    convert = args.convert
+    input = args.input
+    input_train = args.train
+    input_valid = args.valid
+    ratio = args.ratio
+    
+    if convert:
+        if input_train is None and input_valid is None and input is not None:
+            sys.stderr.write(f"{orange}Splitting n2p2 input.data...{normal}\n")
+            create_files_from_text(input, output_dir='inputs')   
+            sys.stderr.write(f"{orange}Converting input.data to DeepMD format...{normal}\n")
+            create_multisystem(folder='inputs', ratio=ratio)
+        elif input_train is not None and input_valid is not None:
+            sys.stderr.write(f"{orange}Splitting n2p2 {input_train}...{normal}\n")
+            create_files_from_text(input_train, output_dir=f'inputs_{input_train}')   
+            sys.stderr.write(f"{orange}Splitting n2p2 {input_valid}...{normal}\n")
+            create_files_from_text(input_valid, output_dir=f'inputs_{input_valid}')   
+            sys.stderr.write(f"{orange}Converting {input_train} to DeepMD format...{normal}\n")
+            create_multisystem(folder=f'inputs_{input_train}', ratio=1, outfolders=['training_data'])
+            sys.stderr.write(f"{orange}Converting {input_valid} to DeepMD format...{normal}\n")
+            create_multisystem(folder=f'inputs_{input_valid}', ratio=1, outfolders=['validation_data'])
+        else:
+            sys.stderr.write(f"{orange}Please provide the training and validation data files or the input.data file.{normal}\n")
+            sys.exit(1)
+
+    # write input.json file
+    inputs = f"""
+{{
+"model": {{"type_map": ["B", "Ag"], 
+            "descriptor":{{"type":        "se_e2_a" ,
+                          "sel":         "auto",
+                          "rcut_smth":   0.50,
+                          "rcut":        6.00,
+                          "neuron":      [25, 50, 100],
+                          "resnet_dt":   false,
+                          "axis_neuron": 16,
+                          "seed":        1}},
+            "fitting_net" : {{"neuron":   [240, 240, 240],
+                            "resnet_dt": true,
+                            "seed":      1}}
+            }},
+
+"learning_rate" :{{"type":        "exp",
+                  "decay_steps": 50,
+                  "start_lr":    0.001, 
+                  "stop_lr":     3.51e-8}},
+
+"loss" :{{"type"        : "ener",
+         "start_pref_e": 0.02,
+         "limit_pref_e": 1,
+         "start_pref_f": 1000,
+         "limit_pref_f": 1,
+         "start_pref_v": 0,
+         "limit_pref_v": 0}},
+
+"training" : {{"training_data": {{"systems": "training_data",
+                                "batch_size": "auto"}},
+                "validation_data":{{"systems": "validation_data",
+                                   "batch_size": "auto"}},
+                "numb_steps": 1000000,
+                "seed":       10,
+                "disp_file":  "lcurve.out",
+                "disp_freq":  100,
+                "save_freq":  500
+            }}
+}}
+"""
+    with open('input.json', 'w') as f:
+        f.write(inputs)
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs["help"] = help
+        if default is not None and args[0] != "-h":
+            kwargs["default"] = default
+            if help is not None:
+                kwargs["help"] += f"\n{orange}Default: {default}{normal}"
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{bold}{orange}Prepare the traing and validation datasets for DeepMD training, and also write input.json.{normal}
+""")
+    parser.add_argument("--convert", "-c",
+                        help    = "Split an input.data file and convert it to DeepMD format.",
+                        default = False, 
+                        action  = "store_true")
+    parser.add_argument("--input", "-i",
+                        help    = "Name of the input file to split.",
+                        default = "input.data", 
+                        type    = str)
+    parser.add_argument("--train", "-t",
+                        help    = "Name of the training data file (n2p2's 'train.data/).",
+                        default = None, 
+                        type    = str)
+    parser.add_argument("--valid", "-v",
+                        help    = "Name of the validation data file (n2p2's 'test.data').",
+                        default = None, 
+                        type    = str)
+    parser.add_argument("--ratio", "-r",
+                        help    = "Ratio of dataset to use as validation data.",
+                        default = 0.1, 
+                        type    = float)
+    
+    parser.usage = f"{orange}{parser.format_usage()[7:]}{normal}"
+    return parser
+
+
+if __name__ == "__main__":
+    """Run as a stand-alone script"""
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
