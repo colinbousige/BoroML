@@ -104,7 +104,9 @@ Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where 
 
 Please cite the following articles if you use any of the files in this archive:
 
-*"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* (2023)](https://doi.org/10.1021/jacs.3c11549).
+- *"Neural network approach for a rapid prediction of metal-supported borophene properties"*, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, [*J. Am. Chem. Soc.* **145** (2023), 27857-27866](https://doi.org/10.1021/jacs.3c11549)
+
+<details> <summary>bibtex</summary>
 
 ```bibtex
 @article{Mignon2023,
@@ -118,6 +120,8 @@ Please cite the following articles if you use any of the files in this archive:
   pages = {27857-27866}
 }
 ```
+
+</details>
 
 ## Author
 
