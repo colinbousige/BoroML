@@ -104,10 +104,10 @@ Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where 
 
 Please cite the following articles if you use any of the files in this archive (click to see the bibtex entry):
 
-<details> <summary> <i>"Neural network approach for a rapid prediction of metal-supported borophene properties"</i>, P. Mignon, A. Allouche, N.R. Innis, and C. Bousige, <a href="https://doi.org/10.1021/jacs.3c11549"><i>J. Am. Chem. Soc.</i> <b>145</b> (2023), 27857-27866</a> </summary>
+<details> <summary> <i>"Neural network approach for a rapid prediction of metal-supported borophene properties"</i>, P. Mignon, A.R. Allouche, N.R. Innis, and C. Bousige, <a href="https://doi.org/10.1021/jacs.3c11549"><i>J. Am. Chem. Soc.</i> <b>145</b> (2023), 27857-27866</a> </summary>
 
 ```bibtex
-@article{Mignon2023,
+@article{mignon_neural_2023,
   title = {Neural Network Approach for a Rapid Prediction of Metal-Supported Borophene Properties},
   author = {Pierre Mignon and Abdul-Rahman Allouche and Neil Richard Innis and Colin Bousige},
   journal = {Journal of the American Chemical Society},
@@ -116,6 +116,23 @@ Please cite the following articles if you use any of the files in this archive (
   volume = {145},
   number = {50},
   pages = {27857-27866}
+}
+```
+
+</details>
+
+<details> <summary> <i>"A portable dataset for borophene growth modeling with reactive neural network potentials"</i>, C. Bousige, A.A. Delenda, A.R. Allouche, and P. Mignon (submitted) </summary>
+
+```bibtex
+@article{bousige_portable_2025,
+  title = {A portable dataset for borophene growth modeling with reactive neural network potentials},
+  author = {Colin Bousige and Anouar-Akacha Delenda and Abdul-Rahman Allouche and Pierre Mignon},
+  journal = {(submitted)},
+  year = {2025},
+  doi = {},
+  volume = {},
+  number = {},
+  pages = {}
 }
 ```
 
