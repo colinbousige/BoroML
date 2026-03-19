@@ -121,18 +121,18 @@ Please cite the following articles if you use any of the files in this archive (
 
 </details>
 
-<details> <summary> <i>"A portable dataset for borophene growth modeling with reactive neural network potentials"</i>, C. Bousige, A.A. Delenda, A.R. Allouche, and P. Mignon (submitted) </summary>
+<details> <summary> <i>"A portable dataset for borophene growth modeling with reactive neural network potentials"</i>, C. Bousige, A.A. Delenda, A.R. Allouche, and P. Mignon, <a href="https://doi.org/10.1021/acs.jpcc.5c04912"><i>J. Phys. Chem. C</i> <b>129</b> (2025), 18760</a> </summary>
 
 ```bibtex
 @article{bousige_portable_2025,
   title = {A portable dataset for borophene growth modeling with reactive neural network potentials},
   author = {Colin Bousige and Anouar-Akacha Delenda and Abdul-Rahman Allouche and Pierre Mignon},
-  journal = {(submitted)},
+  journal = {J. Phys. Chem. C},
   year = {2025},
-  doi = {},
-  volume = {},
-  number = {},
-  pages = {}
+  doi = {10.1021/acs.jpcc.5c04912},
+  volume = {129},
+  number = {41},
+  pages = {18760}
 }
 ```
 
