@@ -140,8 +140,7 @@ The **Output** section supports exporting structures in the following formats:
 
 | Issue | Solution |
 |-------|----------|
-| **DeePMD import fails** | Ensure `deepmd-kit` is installed. Use the correct platform-specific group (e.g., `mac` for macOS, `linux-gpu` for Linux with GPU). |
-| **TensorFlow errors on macOS** | Use the `mac` group to install `tensorflow-macos`. Avoid `tensorflow` or `tensorflow-gpu`. |
+| **DeePMD import fails** | Ensure `deepmd-kit` is installed. Use the correct platform-specific group |
 | **CUDA errors on Linux/Windows** | Install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) and [cuDNN](https://developer.nvidia.com/cudnn). Verify with `nvidia-smi`. |
 | **`py3Dmol` fails to render** | Ensure your browser supports **WebGL** (Chrome, Firefox, Edge recommended). |
 | **Large 3D structures are slow** | Reduce the number of repeated cells (`Nrepx`, `Nrepy`) or disable bonds in the 3D view. |
