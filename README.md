@@ -27,7 +27,7 @@ Please [cite these articles](#how-to-cite) if you use any of the files in this a
 
 ## Contents of this archive
 
-- [borocreator](https://github.com/colinbousige/BoroML/tree/main/borocreator): Streamlit GUI tool to build and visualize borophene structures, run DeePMD relaxation, and export structures in various formats.
+- [borocreator](https://github.com/colinbousige/BoroML/tree/main/borocreator): Streamlit GUI tool to build and visualize borophene structures, run DeePMD relaxation, and export structures in various formats. You can also use the [online app](https://borocreator.streamlit.app/)
 - [potential](https://github.com/colinbousige/BoroML/tree/main/potential): The potential files for the n2p2, DeePMD and NNMP MLIPs
 - [lammps](https://github.com/colinbousige/BoroML/tree/main/lammps): Sample LAMMPS input files for launching an MD simulation with the n2p2, DeePMD and NNMP MLIPs
 - [scripts](https://github.com/colinbousige/BoroML/tree/main/scripts): Various scripts used for post-treating the data or generating structures

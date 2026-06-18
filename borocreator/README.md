@@ -3,6 +3,7 @@
 Interactive Streamlit app to build borophene structures, visualize them in 2D/3D, and export structures.
 
 The app supports two workflows:
+
 - **Manual structure creation** from borophene and slab parameters.
 - **Importing external structures**, including multi-frame files, then selecting the active frame.
 
@@ -10,24 +11,22 @@ It also includes a **DeePMD-based relaxation step** in the Structure tab.
 
 ---
 
-## 📋 Requirements
+## Online Use
 
-- **Python 3.10** (required for compatibility with dependencies).
+Go to the [online app](https://borocreator.streamlit.app/)
+
+---
+
+## Local Use (recommended for large structures and using MD relaxation/optimization features)
+
+### 📋 Requirements
+
+- **Python >=3.10,<3.12** (required for compatibility with dependencies).
 - **[uv](https://docs.astral.sh/uv/)** (recommended for dependency management).
-
----
-
-## 🚀 Setup
-
-### Requirements
-- Python **3.10 or 3.11** (required for compatibility).
-- [uv](https://docs.astral.sh/uv/) (recommended for dependency management).
-
----
 
 ### Install Dependencies
 
-#### **CPU-Only (Works on All Platforms)**
+#### CPU-Only (Works on All Platforms)
 
 ```bash
 uv venv .venv --python 3.10
@@ -37,9 +36,7 @@ uv sync
 - Works on **macOS (M1/M2/M3), Linux, and Windows**.
 - Uses **CPU-only DeePMD-kit**.
 
----
-
-#### **GPU Support (Linux/Windows Only)**
+#### GPU Support (Linux/Windows Only)
 
 If you have a **CUDA-compatible GPU** (Linux/Windows):
 
@@ -52,9 +49,9 @@ uv sync --group gpu
   - Install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) and [cuDNN](https://developer.nvidia.com/cudnn).
   - Verify GPU detection with `nvidia-smi`.
 
-## 🏃 Run the App
+### 🏃 Run the App
 
-### Option 1: Activate the Virtual Environment
+#### Option 1: Activate the Virtual Environment
 
 ```bash
 # Linux/macOS
@@ -67,7 +64,7 @@ source .venv/bin/activate
 streamlit run BoroCreator.py
 ```
 
-### Option 2: Use `uv run` (No Activation Needed)
+#### Option 2: Use `uv run` (No Activation Needed)
 
 ```bash
 uv run streamlit run BoroCreator.py
