@@ -1,4 +1,4 @@
-# Neural network approach for a rapid prediction of metal-supported borophene properties <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
+# Borophene ML tools <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
 
 This archive contains various files and scripts linked with the articles listed in the [How to cite](#how-to-cite) section below. It includes sample LAMMPS input files, potential files for different machine learning interatomic potentials (MLIPs) for **borophene on silver**, and various scripts for structure generation, post-treatment of data, and adaptive training of neural network potentials.
 
@@ -27,9 +27,13 @@ Please [cite these articles](#how-to-cite) if you use any of the files in this a
 
 ## Contents of this archive
 
+- [borocreator](https://github.com/colinbousige/BoroML/tree/main/borocreator): Streamlit GUI tool to build and visualize borophene structures, run DeePMD relaxation, and export structures in various formats.
 - [potential](https://github.com/colinbousige/BoroML/tree/main/potential): The potential files for the n2p2, DeePMD and NNMP MLIPs
 - [lammps](https://github.com/colinbousige/BoroML/tree/main/lammps): Sample LAMMPS input files for launching an MD simulation with the n2p2, DeePMD and NNMP MLIPs
 - [scripts](https://github.com/colinbousige/BoroML/tree/main/scripts): Various scripts used for post-treating the data or generating structures
+- [classification](https://github.com/colinbousige/BoroML/tree/main/classification): Script for finding vacancies and classifying borophene structures
+
+----
 
 ## Description of the scripts
 
@@ -41,10 +45,10 @@ pip install -r requirements.txt
 
 ### Structure generators
 
-- `BoroPy.py`:
+- `borocreator/BoroCreator.py`:
   - Streamlit GUI tool to build and visualize borophene structures
-  - Usage (local): `streamlit run BoroPy.py`
-  - Or use the [online app](https://boroml.streamlit.app/)
+  - Usage (local): `streamlit run BoroCreator.py`
+  - Or use the [online app](https://borocreator.streamlit.app/)
 - `xgenerate-structure`:
   - Generate a borophene structure to stdout
   - Usage: `python xgenerate-structure -h` to get the help

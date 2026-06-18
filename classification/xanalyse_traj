@@ -1,0 +1,500 @@
+#!/usr/local/bin/python3
+
+import pandas as pd
+import os
+import numpy as np
+import sys
+import matplotlib.pyplot as plt
+from ase import Atoms
+from glob import glob
+from ase.calculators.singlepoint import SinglePointCalculator
+from read_write import write_lammps_traj
+import joblib
+import argparse
+import textwrap
+from dscribe.descriptors import LMBTR
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
+orange = "\033[93m"
+bold = "\033[1m"
+normal = "\033[0m"
+
+Rmax = 10
+nbins = 100
+
+saved = joblib.load('classification_model.pkl')
+model = saved['model']
+scaler = saved['scaler']
+pca = saved['pca']
+classes = saved['classes']
+desc = saved['desc']
+rcut = saved['rcut']
+nbins = saved['nbins']
+sigma = saved['sigma']
+w_scale = saved['w_scale']
+Npca = saved['Npca']
+threshold = saved['threshold']
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def compute_descriptors(atoms, spec=["He"], rcut=15.0, nbins=50, sigma=[1.0, 5.0], w_scale=0.5):
+    """Compute LMBTR descriptors for all atoms in an Atoms object
+
+    Args:
+        atoms (Atoms): The Atoms object
+        spec (list, optional): Species to look at (for acsf, soap, lmbtr). Defaults to ["He"].
+        rcut (float, optional): Cutoff in Å. Defaults to 15.0.
+        nbins (int, optional): Number of bins (for lmbtr and distrib). Defaults to 50.
+        sigma (list, optional): Sigma values for LMBTR. Defaults to [1.0, 5.0].
+        w_scale (float, optional): Weighting scale for LMBTR. Defaults to 0.5. w(r)=exp(-w_scale*r), and threshold is 1e-3 (i.e. w(r)<1e-3 are ignored).
+
+    Returns:
+        An array of descriptors, dimension Natoms x Ndim where Ndim is the dimension of the used descriptor
+    """
+    atom = atoms.copy()
+    for key in ["momenta", "velocities"]:
+        if key in atom.arrays:
+            del atom.arrays[key]
+    atom.calc = None
+
+    calculator_dist = LMBTR(
+        species=spec,
+        geometry={"function": "distance"},
+        grid={"min": 0, "max": rcut, "n": nbins, "sigma": sigma[0]},
+        weighting={"function": "exp", "scale": w_scale, "threshold": 1e-3},
+        periodic=False,
+        normalization="l2"
+    )
+    calculator_angle = LMBTR(
+        species=spec,
+        geometry={"function": "angle"},
+        grid={"min": 0, "max": 180, "n": nbins*2, "sigma": sigma[1]},
+        weighting={"function": "exp", "scale": w_scale, "threshold": 1e-3},
+        periodic=False,
+        normalization="l2"
+    )
+
+    dist_features = calculator_dist.create(atom, n_jobs=1)
+    angle_features = calculator_angle.create(atom, n_jobs=1)
+
+    # Concatenation des features
+    desc = []
+    for i in range(len(atom)):
+        combined = np.hstack([dist_features[i], angle_features[i]])
+        desc.append(combined)
+    desc = np.array(desc)
+    return desc
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def predict_allo(atoms, nbins=50, rcut=10.0, sigma=[1.0, 5.0], w_scale=0.5,
+                 model=None, xscaler=None, threshold=None, pca=None, encoder=None):
+    """
+    Predict the allotrope of each atom in an Atoms object using a trained model.
+    If the maximum probability is below threshold, assign 'unknown' allotrope.
+
+    Parameters:
+    - atoms: ASE Atoms object
+    - nbins: Number of bins for histogram-based descriptors
+    - rcut: Cutoff radius for descriptor calculation
+    - model: Trained model (e.g., RandomForestClassifier, MLPClassifier, SVC)
+    - xscaler: Fitted scaler for feature scaling
+    - threshold: Confidence threshold for assigning 'unknown'
+    - pca: Fitted PCA object for dimensionality reduction
+    - encoder: Fitted LabelEncoder for transforming labels
+
+    Returns:
+    - ypred: Predicted allotrope for each atom
+    """
+    desc = compute_descriptors(
+        atoms=atoms, nbins=nbins, rcut=rcut, sigma=sigma, w_scale=w_scale)
+
+    if xscaler:
+        Xs = xscaler.transform(desc)
+    else:
+        Xs = desc
+
+    if pca:
+        Xs = pca.transform(Xs)
+
+    ypred_proba = model.predict_proba(Xs)
+
+    if not threshold:
+        ypred_encoded = model.predict(Xs)
+        certainties = np.max(ypred_proba, axis=1)
+        if encoder:
+            ypred = encoder.inverse_transform(ypred_encoded)
+        else:
+            ypred = ypred_encoded
+    else:
+
+        if encoder:
+            # Get the predicted class indices
+            pred_indices = np.argmax(ypred_proba, axis=1)
+            max_probas = np.max(ypred_proba, axis=1)
+
+            # Decode predictions
+            ypred = np.array([
+                encoder.inverse_transform([pred_indices[i]])[
+                    0] if max_probas[i] >= threshold else 'unknown'
+                for i in range(len(pred_indices))
+            ])
+            certainties = max_probas
+        else:
+            # For models without encoder (RF, SVM)
+            ypred = np.array([
+                model.classes_[np.argmax(p)] if np.max(
+                    p) >= threshold else 'unknown'
+                for p in ypred_proba
+            ])
+            certainties = np.max(ypred_proba, axis=1)
+
+    return ypred, certainties
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def read_lammps(file):
+    """
+    Read a LAMMPS trajectory file and return a list of ASE Atoms objects and a list of timesteps.
+    """
+
+    with open(file, 'r') as f:
+        lines = f.readlines()
+    images = []
+    timesteps = []
+    for i, line in enumerate(lines):
+        if "ITEM: TIMESTEP" in line:
+            timestep = int(lines[i+1].strip())
+            timesteps.append(timestep)
+        if "ITEM: NUMBER OF ATOMS" in line:
+            natoms = int(lines[i+1].strip())
+        if "ITEM: BOX BOUNDS" in line:
+            box = []
+            for j in range(3):
+                box.append([float(x) for x in lines[i+j+1].strip().split()])
+        if "ITEM: ATOMS" in line:
+            positions = []
+            symbols = []
+            energies = []
+            forces = []
+            try:
+                for j in range(natoms):
+                    parts = lines[i+j+1].strip().split()
+                    symbols.append(parts[1])
+                    positions.append([float(x) for x in parts[2:5]])
+                    if len(parts) >= 6:
+                        energies.append(float(parts[5]))
+                    if len(parts) >= 9:
+                        forces.append([float(x) for x in parts[6:9]])
+                at = Atoms(symbols,
+                           positions=positions,
+                           cell=[[box[0][1], 0, 0], [
+                               0, box[1][1], 0], [0, 0, box[2][1]]]
+                           )
+                at.calc = SinglePointCalculator(at,
+                                                energies=energies,
+                                                energy=sum(energies),
+                                                forces=forces)
+            except:
+                sys.stderr.write(f"""Error reading atoms: 
+- File: {file} 
+- Timestep {timestep}
+""")
+                sys.stderr.flush()
+                pass
+            images.append(at)
+    return images, timesteps
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def detect_holes(atoms, dpi=200, pointsize=400, minarea=800, maxarea=5000, plot=False):
+    """
+    Function to detect holes in a 2D image of atoms using OpenCV
+    """
+    import io
+    import cv2
+    import numpy as np
+
+    def get_img_from_fig(atoms, dpi=200):
+        """
+        Convert a Matplotlib figure to a numpy array with RGB channels
+        """
+        fig, ax = plt.subplots()
+        ax.scatter(atoms.positions[:, 0],
+                   atoms.positions[:, 1], c='k', s=pointsize)
+        ax.set(xlim=(0, atoms.cell[0, 0]), ylim=(
+            0, atoms.cell[1, 1]), aspect='equal')
+        ax.set_axis_off()
+        ax.margins(0)
+        fig.tight_layout(pad=0)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=dpi,
+                    bbox_inches='tight', pad_inches=0)
+        plt.close(fig)
+        buf.seek(0)
+        img = cv2.imdecode(np.frombuffer(
+            buf.getvalue(), dtype=np.uint8), cv2.IMREAD_COLOR)
+        buf.close()
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    Batoms = atoms.symbols.search('B')
+    img = get_img_from_fig(atoms[Batoms], dpi=dpi)
+    a = atoms.cell[0, 0]
+    b = atoms.cell[1, 1]
+    xdim, ydim = img.shape[1], img.shape[0]
+
+    params = cv2.SimpleBlobDetector_Params()
+    params.filterByArea = True
+    params.filterByInertia = False
+    params.filterByConvexity = False
+    params.filterByCircularity = False
+    params.minArea = minarea
+    params.maxArea = maxarea
+    params.blobColor = 255
+    detector = cv2.SimpleBlobDetector_create(params)
+    keypoints = detector.detect(img)
+
+    keypointsdf = pd.DataFrame(
+        [[keyPoint.pt[0]/xdim*a, b-keyPoint.pt[1]/ydim*b, keyPoint.size/ydim*b/xdim*a]
+            for keyPoint in keypoints],
+        columns=['x', 'y', 's']
+    )
+    # keypointsdf = keypointsdf[keypointsdf.s > 0.02]
+
+    if plot:
+        fig, ax = plt.subplots()
+        ax.scatter(atoms.positions[Batoms, 0],
+                   atoms.positions[Batoms, 1], c='k', s=pointsize, label='B atoms')
+        ax.set(xlim=(0, atoms.cell[0, 0]), ylim=(
+            0, atoms.cell[1, 1]), aspect='equal')
+        # ax.set_axis_off()
+        ax.margins(0)
+        fig.tight_layout(pad=0)
+
+        # Vérifier que keypointsdf n'est pas vide
+        if not keypointsdf.empty:
+            # Convertir s en tableau NumPy pour éviter les erreurs de type
+            s_values = np.array(keypointsdf.s * pointsize)
+            ax.scatter(keypointsdf.x, keypointsdf.y, s=s_values,
+                       c='r', label='Detected Vacancies', alpha=0.5)
+            print(f"Detected {len(keypointsdf)} vacancies.")
+        else:
+            print("No vacancies detected.")
+
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return keypointsdf
+
+# # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def analyse(infile, thres=threshold, minarea=800, maxarea=5000, dpi=200, pointsize=400):
+    """
+    Function to analyse a holes organization in a trajectory of atoms
+    """
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    # Read atoms positions and center them
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    atoms, timesteps = read_lammps(infile)
+    zmean = []
+    outfile = infile.split("/")[-1].replace(".lammpstrj", "")
+    for k, at in enumerate(atoms):
+        Bid = atoms[k].symbols.search('B')
+        a = atoms[k].cell[0, 0]
+        b = atoms[k].cell[1, 1]
+        COM = atoms[k][Bid].get_center_of_mass()
+        # center x and y coordinates around the center of mass
+        atoms[k].positions[:, 0] = atoms[k].positions[:, 0] - COM[0] + a/2
+        atoms[k].positions[:, 1] = atoms[k].positions[:, 1] - COM[1] + b/2
+        # apply periodic boundary conditions
+        atoms[k].positions[:, 0] = atoms[k].positions[:, 0] % a
+        atoms[k].positions[:, 1] = atoms[k].positions[:, 1] % b
+        zmean.append(np.mean(atoms[k].positions[Bid, 2]))
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    # Detect all holes and save as trajectory
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    sys.stderr.write(f"Finding holes in {infile}\n")
+    sys.stderr.flush()
+    holes = [detect_holes(at, dpi=dpi, pointsize=pointsize,
+                          minarea=minarea, maxarea=maxarea) for at in atoms]
+    at_holes = []
+    allotrope = []
+    sys.stderr.write(f"Finding allotropes for {infile}\n")
+    sys.stderr.flush()
+    for i, h in enumerate(holes):
+        if len(h) > 0:
+            x = h.x.values
+            y = h.y.values
+            # Create an array of the same length as x, filled with zmean[i]
+            z = np.full_like(x, zmean[i])
+            positions = np.c_[x, y, z]
+            at_holes.append(Atoms("X"*len(h),
+                                  positions=positions,
+                                  cell=atoms[i].cell))
+            temp = Atoms(
+                symbols=["He"] * len(h),
+                positions=positions,
+                cell=atoms[i].cell
+            )
+            if len(temp) == 0:
+                allotrope.append((np.array([]), np.array([])))
+                continue
+            allotrope.append(predict_allo(atoms=temp, pca=pca, threshold=thres,
+                                          model=model, xscaler=scaler, encoder=None,
+                                          nbins=nbins, rcut=rcut, sigma=sigma,
+                                          w_scale=w_scale))
+            at_holes[-1].arrays['allotrope'] = allotrope[-1][0]
+        else:
+            at_holes.append(Atoms('', cell=atoms[i].cell))
+    atomsANDholes = [at1 + at2 for at1, at2 in zip(atoms, at_holes)]
+    # save at_holes as a trajectory
+    write_lammps_traj(
+        atomsANDholes, f'AttribVac_{outfile}.lammpstrj', allotrope=True, energies=False)
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    # Use the saved model to predit allotropes and certainties on holes trajectory
+    # # # # # # # # # # # # # # # # # # # # # # # # #
+    sys.stderr.write(f"Saving allotrope data for {infile}\n")
+    sys.stderr.flush()
+    allotrope_labels = [allo[0] for allo in allotrope]
+    # make a tidy DataFrame of the number of each allotrope per frame
+    # columnnames are 'timestep', 'allotrope', 'count
+    # possible allotropes are in `classes`, plus 'unknown'
+    # 'timestep' is from `timesteps`
+    # 'count' is the number of atoms of each allotrope in the frame
+    # forget about certainties for now
+    allo_counts = []
+    possible_allotropes = list(classes) + ['unknown']
+    for allo_labels in possible_allotropes:
+        for i, labels in enumerate(allotrope_labels):
+            count = np.sum(labels == allo_labels)
+            allo_counts.append({'timestep': timesteps[i],
+                                'allotrope': allo_labels,
+                                'count': count,
+                                'Natoms': len(atoms[i])})
+    allo_df = pd.DataFrame(allo_counts)
+    allo_df.to_csv(f'analyse_{outfile}.csv', index=False)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def main(args):
+    input = args.input
+    threshold = args.threshold
+    minarea = args.minarea
+    maxarea = args.maxarea
+    dpi = args.dpi
+    setup = args.setup
+    pointsize = args.pointsize
+    if not input:
+        sys.stderr.write(f"\n{orange}Error: No input file provided.{normal}\n")
+        exit(1)
+    if not os.path.exists(input) or not os.path.isfile(input):
+        sys.stderr.write(f"\n{orange}Error: {input} does not exist.{normal}\n")
+        exit(1)
+    if not input.endswith(".lammpstrj"):
+        sys.stderr.write(
+            f"\n{orange}Error: {input} is not a LAMMPS trajectory file (.lammpstrj).{normal}\n")
+        exit(1)
+
+    if setup:
+        sys.stderr.write(f"\n{orange}Running setup for {input}.{normal}\n")
+        sys.stderr.flush()
+        atoms, timesteps = read_lammps(input)
+        holes = detect_holes(atoms[-1], dpi=dpi, pointsize=pointsize,
+                             minarea=minarea, maxarea=maxarea, plot=True)
+        sys.stderr.write(f"\n{orange}Setup complete for {input}.{normal}\n")
+        sys.stderr.flush()
+        exit(0)
+    else:
+        sys.stderr.write(f"\n{orange}Running analysis for {input}.{normal}\n")
+        sys.stderr.flush()
+        analyse(input, thres=threshold, minarea=minarea,
+                maxarea=maxarea, dpi=dpi, pointsize=pointsize)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
+
+    def _fill_text(self, text, width, indent):
+        # Override to ensure description is also formatted
+        return '\n'.join(self._split_lines(text, width))
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
+                                        description=f"""
+{bold}{orange}Perform vacancy analysis of a single LAMMPS trajectory{normal}
+""")
+    parser.add_argument("--input", "-in",
+                        type=str,
+                        help="Input file.",
+                        default=glob("*.lammpstrj")[0] if len(glob("*.lammpstrj")) > 0 else None)
+    parser.add_argument("--threshold", "-th",
+                        type=float,
+                        help="Threshold for allotrope prediction.",
+                        default=0.5)
+    parser.add_argument("--setup", "-st",
+                        help="""Troubleshooting vacancy analysis setup to adjust the minarea, maxarea, pointsize and dpi parameters. 
+
+If set, the script will only run the setup and plot the vacancies on the last image of the trajectory and not perform the full analysis.""",
+                        action="store_true",
+                        default=False)
+    parser.add_argument("--minarea", "-ma",
+                        type=float,
+                        help="Minimum area for vacancy analysis.",
+                        default=500)
+    parser.add_argument("--maxarea", "-xa",
+                        type=float,
+                        help="Maximum area for vacancy analysis.",
+                        default=5000)
+    parser.add_argument("--pointsize", "-ps",
+                        type=float,
+                        help="Point size for vacancy analysis.",
+                        default=150)
+    parser.add_argument("--dpi", "-dp",
+                        type=int,
+                        help="DPI for image output.",
+                        default=200)
+    parser.usage = f"{orange}{parser.format_usage()[7:]}{normal}"
+    return parser
+
+
+if __name__ == "__main__":
+    """Run as a stand-alone script"""
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
