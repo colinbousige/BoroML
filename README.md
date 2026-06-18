@@ -1,4 +1,5 @@
-# Borophene ML tools <a href="https://zenodo.org/badge/latestdoi/698260056"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
+# Borophene ML tools <a href="https://doi.org/10.5281/zenodo.8392717"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
+
 
 This archive contains various files and scripts linked with the articles listed in the [How to cite](#how-to-cite) section below. It includes sample LAMMPS input files, potential files for different machine learning interatomic potentials (MLIPs) for **borophene on silver**, and various scripts for structure generation, post-treatment of data, and adaptive training of neural network potentials.
 
