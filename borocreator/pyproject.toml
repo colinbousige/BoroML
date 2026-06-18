@@ -1,0 +1,29 @@
+[project]
+name = "BoroCreator"
+version = "1.0.0"
+description = "Borophene builder and visualization app"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"  # Limit to Python 3.10-3.11 for compatibility
+dependencies = [
+    "ase>=3.28.0",
+    "matplotlib>=3.10.9",
+    "numpy>=1.23.5,<2.0.0",  # Downgrade for TensorFlow compatibility
+    "pandas>=2.3.3",
+    "plotly>=5.24.1",
+    "py3dmol>=2.5.5",
+    "scipy>=1.15.3",
+    "watchdog>=3.0.0",
+    'tqdm>=4.66.1',
+    "streamlit>=1.57.0",
+    "deepmd-kit[cpu]>=3.1.1",  # CPU-only DeePMD-kit (works on all platforms)
+]
+
+[tool.uv]
+package = false
+
+# Optional: Platform-specific groups for GPU support (Linux/Windows only)
+[dependency-groups]
+gpu = [
+    "deepmd-kit[gpu]>=3.1.1",  # GPU version for Linux/Windows
+    "tensorflow[and-cuda]>=2.15.0",
+]

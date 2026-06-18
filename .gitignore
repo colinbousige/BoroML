@@ -1,3 +1,4 @@
-scripts/__pycache__/
+**/__pycache__/
 update.sh
 **/.DS_Store
+**/.venv/
