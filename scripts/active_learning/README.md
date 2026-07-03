@@ -6,13 +6,25 @@ This folder contains the bash/python workflow used to run active learning on HPC
 - LAMMPS for MD tests
 - VASP for DFT labeling of selected structures
 
-The main entry point is `goal.sh`, which dispatches the workflow stages.
+The main entry point is `bin/goal.sh`, which dispatches the workflow stages.
 
 ## 1) What you need before starting
 
-Make sure scripts in this folder are executable and available by adding it to your `PATH`.
+Add `scripts/active_learning/bin` to your `PATH` (not `scripts/active_learning`).
 
-Then, run all commands from your working directory, where you need the following files:
+Example from repository root:
+
+```bash
+export PATH="$PWD/scripts/active_learning/bin:$PATH"
+```
+
+Or with an absolute path:
+
+```bash
+export PATH="/path/to/BoroML/scripts/active_learning/bin:$PATH"
+```
+
+Then you can run all commands from your working directory, where you need the following files:
 
 - Input/control files:
   - `input_AL`
@@ -41,16 +53,16 @@ Template files are centralized in `templates/`:
 - `templates/lammps.env`
 - `templates/vasp.env`
 
-Recommended: create a run directory from templates with the helper script:
+**Recommended:** create a run directory from templates with the helper script:
 
 ```bash
-scripts/active_learning/init_run_dir.sh <your-run-directory>
+scripts/active_learning/bin/init_run_dir.sh <your-run-directory>
 ```
 
 Use `--force` to overwrite existing files in the run directory:
 
 ```bash
-scripts/active_learning/init_run_dir.sh <your-run-directory> --force
+scripts/active_learning/bin/init_run_dir.sh <your-run-directory> --force
 ```
 
 Manual alternative:
@@ -74,7 +86,7 @@ Assume you are starting at step `0`.
 1. Initialize the AL step:
 
 ```bash
-./goal.sh init 0
+./bin/goal.sh init 0
 ```
 
 This creates and configures:
@@ -100,7 +112,7 @@ tail -f 0_status.log
 The dispatcher is:
 
 ```bash
-./goal.sh <command> [args]
+./bin/goal.sh <command> [args]
 ```
 
 Main commands:
@@ -126,14 +138,14 @@ Main commands:
 
 Typical loop:
 
-1. `./goal.sh init <k>`
+1. `./bin/goal.sh init <k>`
 2. `sbatch <k>_job_al`
-3. optional dedicated final training: `./goal.sh train <k> <k>_input.data YES`
-4. MD tests: `./goal.sh xMDs <k> <epoch> YES`
-5. EW DFT: `./goal.sh EW_DFT <k> YES`
-6. dataset update: `./goal.sh rnw_dataset <k> <k>_input.data`
-7. stock update: `./goal.sh rnw_stck <k> YES` then `./goal.sh crt_stck <k>`
-8. next step: `./goal.sh init <k+1>`
+3. optional dedicated final training: `./bin/goal.sh train <k> <k>_input.data YES`
+4. MD tests: `./bin/goal.sh xMDs <k> <epoch> YES`
+5. EW DFT: `./bin/goal.sh EW_DFT <k> YES`
+6. dataset update: `./bin/goal.sh rnw_dataset <k> <k>_input.data`
+7. stock update: `./bin/goal.sh rnw_stck <k> YES` then `./bin/goal.sh crt_stck <k>`
+8. next step: `./bin/goal.sh init <k+1>`
 
 ## 5) Important placeholders in env templates
 

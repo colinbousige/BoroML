@@ -19,8 +19,7 @@ if [ -f ${NEW_STOCK_FILE} ]; then
 fi
 
 ### Check necessary directory exist
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 lammps_datfiles=$($NAPSDIR/read_input.sh input_AL LAMMPS_DAT_FILES)
 tempvariations=$($NAPSDIR/read_input.sh input_AL TEMP)
 

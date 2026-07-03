@@ -15,8 +15,7 @@ NEW_STEP_NB=$(($1 + 1))
 inpdatfile=$2
 newinpdatfile=${NEW_STEP_NB}_input.data
 
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 lammps_datfiles=$($NAPSDIR/read_input.sh input_AL LAMMPS_DAT_FILES)
 
 ### Check inpdatfile file exists

@@ -20,8 +20,7 @@ atnnp=$4
 
 
 ### Define necessary directories
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 TRAINDIR=${WORKDIR}/$1_TRAIN
 # Check if the training directory exists
 if [ ! -d ${TRAINDIR} ]; then

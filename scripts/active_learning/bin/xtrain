@@ -17,8 +17,7 @@ launch_job=$3
 mkdir ${DIR}
 echo "Training directory created: ${DIR}"
 
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 
 nnode=$($NAPSDIR/read_input.sh input_AL NB_NODES_TRAIN)
 

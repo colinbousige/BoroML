@@ -16,8 +16,7 @@ launch_jobs=$2
 
 NEW_STEP_NB=$(($STEP_NB + 1))
 
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 
 NSTRUCT_FROM_DUMP=$($NAPSDIR/read_input.sh input_AL NSTRUCT_DUMP)
 NSTRUCT_FROM_RANDOM=$($NAPSDIR/read_input.sh input_AL NSTRUCT_RAND)

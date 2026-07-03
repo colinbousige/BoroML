@@ -16,9 +16,9 @@ STEP_NB=$1
 workdir=$(pwd)
 
 ### Define necessary directories
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
-ALDIR=${NAPSDIR}/ActiveLearning
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
+ROOTDIR="$(cd "${NAPSDIR}/.." && pwd)"
+ALDIR=${ROOTDIR}/ActiveLearning
 
 # put path to env.py
 ND=$(echo "$NAPSDIR"|sed 's/\//\\\//g')

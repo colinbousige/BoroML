@@ -71,8 +71,7 @@ if [ $# -lt 1 ]; then
 fi
 
 ### Define necessary directories
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Dispatch to stage-specific scripts.
 case "$1" in

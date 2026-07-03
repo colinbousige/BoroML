@@ -16,7 +16,8 @@ run_dir=$1
 force=${2:-}
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
-tpl_dir="${script_dir}/templates"
+root_dir=$(cd "${script_dir}/.." && pwd)
+tpl_dir="${root_dir}/templates"
 
 if [ ! -d "${tpl_dir}" ]; then
     echo "Templates directory not found: ${tpl_dir}"

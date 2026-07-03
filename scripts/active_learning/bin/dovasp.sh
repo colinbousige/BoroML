@@ -26,8 +26,7 @@ STEP_NB=$1
 launch_jobs=$2
 
 ### Define necessary directories
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 
 nbnodes=$($NAPSDIR/read_input.sh input_AL NB_NODES_DFT)
 lammps_datfiles=$($NAPSDIR/read_input.sh input_AL LAMMPS_DAT_FILES)

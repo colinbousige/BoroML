@@ -20,8 +20,7 @@ if [ $# -lt 2 ]; then
         exit
 fi
 
-NAPSDIR=$(which $0)
-NAPSDIR=${NAPSDIR%/*}
+NAPSDIR="$(cd "$(dirname "$0")" && pwd)"
 
 ### Check Active Learning input file exists 
 if [ ! -s input_AL ]; then
