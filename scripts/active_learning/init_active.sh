@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Initialize one adaptive-learning step.
+# Initialize one active-learning step.
 # This script prepares stock chunks and writes <STEP>_job_al,
 # the master SLURM script that drives AL iterations.
 
 if [ $# -lt 1 ] ; then
     echo "    Usage: $0 step_number stock_file_size nnodes"
-    echo "   step_number : number of the adaptive learning step (0 if first step)"
+    echo "   step_number : number of the active learning step (0 if first step)"
     exit 1
 fi
 
@@ -18,7 +18,7 @@ workdir=$(pwd)
 ### Define necessary directories
 NAPSDIR=$(which $0)
 NAPSDIR=${NAPSDIR%/*}
-ALDIR=${NAPSDIR}/AdaptiveLearning
+ALDIR=${NAPSDIR}/ActiveLearning
 
 # put path to env.py
 ND=$(echo "$NAPSDIR"|sed 's/\//\\\//g')
@@ -54,7 +54,7 @@ source ./python.env
 echo "creating stockfiles.data"
 ${NAPSDIR}/split_stock.sh ${STEP_NB}_STOCK.data ${nsdata}
 export PYTHONPATH=$NAPSDIR:$PYTHONPATH
-python ${ALDIR}/adaptive_training.py --request=init --stepNB=${STEP_NB} --nnodes=${nnodes} --Nadd=${nadd}
+python ${ALDIR}/active_training.py --request=init --stepNB=${STEP_NB} --nnodes=${nnodes} --Nadd=${nadd}
 
 # create job file : job_al
 job_file=${STEP_NB}_job_al
@@ -81,7 +81,7 @@ echo "export NODE2=\$(echo \$NODE2 | sed \"s/\\ /,/g\")" >> $job_file
 
 echo "
 for i in {1..${nALcycles}}; do" >> $job_file
-echo "    python ${ALDIR}/adaptive_training.py --request=ScalTrainPred --stepNB=${STEP_NB} --nnodes=${nnodes}"  >> $job_file
+echo "    python ${ALDIR}/active_training.py --request=ScalTrainPred --stepNB=${STEP_NB} --nnodes=${nnodes}"  >> $job_file
 wout=""
 for i in $(seq 1 $nNNP) ; do
 #    echo "    if [ -f ./job_STP${i} ] ; then
@@ -100,7 +100,7 @@ echo "    echo -e \"│  [\$(date +%T)]   └──▶︎ Done\\n│\" >> ${STEP
     ds_increment=0
     ds=1
     while [ \"\$ds\" != \"0\" ]; do
-        python ${ALDIR}/adaptive_training.py --request=CompEfSSDFT --stepNB=${STEP_NB} --ds_increment=\${ds_increment} --nnodes=${nnodes}" >> $job_file
+        python ${ALDIR}/active_training.py --request=CompEfSSDFT --stepNB=${STEP_NB} --ds_increment=\${ds_increment} --nnodes=${nnodes}" >> $job_file
 
 wout=""
 for i in $(seq 1 $nnodes) ; do
@@ -117,7 +117,7 @@ for i in $(seq 1 $nnodes) ; do
     echo "        rm -f ./${STEP_NB}_job_vasp${i}" >> $job_file
 done
 echo "        echo -e \"│  [\$(date +%T)]   └──▶︎ Done\\n│\" >> ${STEP_NB}_status.log
-        python ${ALDIR}/adaptive_training.py --request=updates --stepNB=${STEP_NB}  --nnodes=${nnodes}
+        python ${ALDIR}/active_training.py --request=updates --stepNB=${STEP_NB}  --nnodes=${nnodes}
         ds=\$(tail -2 ${STEP_NB}_status.log|grep -c \"Redo a new : Compare NNPs - get structrs from stock - perform DFT calcs\")
         ds_increment=\$((ds_increment + ds))
         echo -e \"│  [\$(date +%T)]   └──▶︎ Done\\n│\" >> ${STEP_NB}_status.log

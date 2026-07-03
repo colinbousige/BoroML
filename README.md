@@ -1,7 +1,7 @@
 # Borophene ML tools <a href="https://doi.org/10.5281/zenodo.8392717"><img src="https://zenodo.org/badge/698260056.svg" alt="DOI" align="right"></a>
 
 
-This archive contains various files and scripts linked with the articles listed in the [How to cite](#how-to-cite) section below. It includes sample LAMMPS input files, potential files for different machine learning interatomic potentials (MLIPs) for **borophene on silver**, and various scripts for structure generation, post-treatment of data, and adaptive training of neural network potentials.
+This archive contains various files and scripts linked with the articles listed in the [How to cite](#how-to-cite) section below. It includes sample LAMMPS input files, potential files for different machine learning interatomic potentials (MLIPs) for **borophene on silver**, and various scripts for structure generation, post-treatment of data, and active training of neural network potentials.
 
 The MLIPs files included are for the following methods:
 - [DeePMD](https://github.com/deepmodeling/deepmd-kit)
@@ -18,7 +18,7 @@ Please [cite these articles](#how-to-cite) if you use any of the files in this a
 - [Description of the scripts](#description-of-the-scripts)
   - [Structure generators](#structure-generators)
   - [Post-treatment scripts](#post-treatment-scripts)
-  - [Adaptive training scripts](#adaptive-training-scripts)
+  - [Active training scripts](#active-training-scripts)
 - [How to cite](#how-to-cite)
 - [Author](#author)
 - [License](#license)
@@ -87,23 +87,23 @@ pip install -r requirements.txt
   - Compute an STM image from a CHGCAR or PARCHGCAR file
   - Usage: `python xSTM -h` to get the help
 
-### Adaptive training scripts
+### Active training scripts
 
 You **will** need to adapt these scripts to your own cluster and problem...
-Especially the `xjobadaptive` and `adaptive_learning/SlurmJob.py` scripts where some paths and cluster configuration are hardcoded.
+Especially the `xjobactive` and `active_learning/SlurmJob.py` scripts where some paths and cluster configuration are hardcoded.
 
-- `adaptive_learning/adaptive_training.py`:
-  - Script using the following classes to perform an adaptive training of a NNP and distribute jobs on the fly on a SLURM cluster
-- `adaptive_learning/AdaptiveTraining.py`:
-  - Class `AdaptiveTraining` to perform an adaptive training of a NNP
-- `adaptive_learning/Cluster.py`:
+- `active_learning/active_training.py`:
+  - Script using the following classes to perform an active training of a NNP and distribute jobs on the fly on a SLURM cluster
+- `active_learning/ActiveTraining.py`:
+  - Class `ActiveTraining` to perform an active training of a NNP
+- `active_learning/Cluster.py`:
   - Class `Cluster` to help distributing jobs on a cluster
-- `adaptive_learning/SlurmJob.py`:
+- `active_learning/SlurmJob.py`:
   - Class `SlurmJob` to help launch and follow jobs on a SLURM cluster
-- `adaptive_learning/functions.py`:
+- `active_learning/functions.py`:
   - Some user-defined functions
-- `adaptive_learning/xjobadaptive`:
-  - Launch an adaptive training of a NNP on a SLURM cluster. **You need to edit the script to set the correct paths and cluster definition for you**.
+- `active_learning/xjobactive`:
+  - Launch an active training of a NNP on a SLURM cluster. **You need to edit the script to set the correct paths and cluster definition for you**.
 
 ## How to cite
 

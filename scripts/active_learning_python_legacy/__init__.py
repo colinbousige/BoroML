@@ -1,7 +1,7 @@
 """
-# Adaptive Learning
+# Active Learning
 
-List of different functions to be called in an adaptive learning script to build the dataset for an NNP.
+List of different functions to be called in an active learning script to build the dataset for an NNP.
 
 - Author: Colin BOUSIGE
 - Email: colin.bousige@cnrs.fr
@@ -10,7 +10,7 @@ List of different functions to be called in an adaptive learning script to build
 
 ## Usage
 
-First, add this folder (`$HOME/Boro_ML/bin/adaptive_learning` or wherever you put it) to your `$PATH` and `$PYTHONPATH`.
+First, add this folder (`$HOME/Boro_ML/bin/active_learning` or wherever you put it) to your `$PATH` and `$PYTHONPATH`.
 
 Then, go to your working directory, and make sure the following files are there:
 
@@ -27,28 +27,28 @@ Then, go to your working directory, and make sure the following files are there:
 Then do:
 
 ```bash
-xjobadaptive node26
+xjobactive node26
 ```
 
-It will copy the python script `$HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py` in the current directory, and launch the script on `node26`.
+It will copy the python script `$HOME/Boro_ML/bin/active_learning/active_training.py` in the current directory, and launch the script on `node26`.
 
 Alternatively, you can copy the script manually:
 
 ```bash
-cp <path>/adaptive_learning/jobadaptive .
+cp <path>/active_learning/jobactive .
 ```
 
-Then edit `jobadaptive` to your needs and launch it with `sbatch jobadaptive`.
+Then edit `jobactive` to your needs and launch it with `sbatch jobactive`.
 
 ## Note
 
-`stock.data` is a file containing all the structures that will be used in the adaptive learning procedure. It is usually created with the script `xLAMMPStoNNP` that gathers all structures in a LAMMPS trajectory into an n2p2-type `stock.data` file. If created by this script, all energies and forces are set to 0 since they are not known at the DFT level.
+`stock.data` is a file containing all the structures that will be used in the active learning procedure. It is usually created with the script `xLAMMPStoNNP` that gathers all structures in a LAMMPS trajectory into an n2p2-type `stock.data` file. If created by this script, all energies and forces are set to 0 since they are not known at the DFT level.
 
-In case you have already computed some structures with DFT, you can still include them in the `stock.data` file. In this case, all structures that have non zero energies will be extracted to individual `vasp/OUTCAR_i.inp` files. This way, they will be detected as already computed and not be computed again during the adaptive learning procedure.
+In case you have already computed some structures with DFT, you can still include them in the `stock.data` file. In this case, all structures that have non zero energies will be extracted to individual `vasp/OUTCAR_i.inp` files. This way, they will be detected as already computed and not be computed again during the active learning procedure.
 
 ## Adapting to your own needs
 
-- You must have access to the `potpaw_pbe` folder of VASP to use this script. The path to the folder containing `potpaw_pbe` is set in the `jobadaptive` script created by running `xjobadaptive`. It is set by default to `$HOME/bin/vasp`, you need to change it if it not there.
+- You must have access to the `potpaw_pbe` folder of VASP to use this script. The path to the folder containing `potpaw_pbe` is set in the `jobactive` script created by running `xjobactive`. It is set by default to `$HOME/bin/vasp`, you need to change it if it not there.
 - `environments.py` is a file containing the environment variables for the cluster. You need to adapt it to your own cluster and where you have installed `n2p2`, `gsl`, `openmpi`, and `vasp`.
 - `SlurmJob` is a class to run and manage `n2p2` and `VASP` jobs on `lynx`, the iLM cluster. You need to adapt it to your own cluster if your cluster is not using SLURM or if you don't need to specify the queue when submitting a job on your cluster.
 
@@ -58,8 +58,8 @@ In case you have already computed some structures with DFT, you can still includ
   - A class to run and manage `n2p2` and `VASP` jobs on `lynx`
 - `Cluster`
   - A class to access cluster state
-- `AdaptiveTraining`
-  - A class to perform an Adaptive Training
+- `ActiveTraining`
+  - A class to perform an Active Training
 
 ## List of available functions
 
@@ -74,6 +74,6 @@ In case you have already computed some structures with DFT, you can still includ
 
 from .Cluster import Cluster
 from .SlurmJob import SlurmJob
-from .AdaptiveTraining import AdaptiveTraining
+from .ActiveTraining import ActiveTraining
 from .functions import *
 from .environment import *

@@ -9,7 +9,7 @@
 if [ $# -lt 2 ]; then
         echo
         echo "   WARNING USAGE SHOULD BE: $0 step_number epoch X YES/NO atomsAlements lammps_input lammps_input.dat "
-        echo "   1. step_number : number of the adaptive learning step (0 if first step)"
+        echo "   1. step_number : number of the active learning step (0 if first step)"
         echo "   2. epoch nb for the NNP parameters: weights*.data"
  #       echo "   3. X : nb of EW structure to be converted to POSCARS for each LAMMPS trajectory"
  #       echo "   4. YES/NO : launch the jobs that have been created ?"
@@ -23,7 +23,7 @@ fi
 NAPSDIR=$(which $0)
 NAPSDIR=${NAPSDIR%/*}
 
-### Check Adaptive Learning input file exists 
+### Check Active Learning input file exists 
 if [ ! -s input_AL ]; then
     echo "   input_AL file not found, please create it with the necessary parameters"a
     $NAPSDIR/read_input.sh

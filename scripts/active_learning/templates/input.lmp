@@ -1,4 +1,4 @@
-# Template LAMMPS input used by scripts/adaptive_learning/doMDtests.sh.
+# Template LAMMPS input used by scripts/active_learning/doMDtests.sh.
 # Placeholders replaced automatically:
 # - T0TEMP
 # - T1TEMP

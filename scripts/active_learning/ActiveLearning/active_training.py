@@ -1,6 +1,6 @@
 #!/home/pmignon/bin/miniconda3/bin/python
 
-from AdaptiveLearning import * # type: ignore
+from ActiveLearning import * # type: ignore
 import os
 import glob
 import time
@@ -12,8 +12,8 @@ import subprocess
 args = getArguments()
 Nadd = args.Nadd                           # nb of structures to added to the dataset every iteration f the adptive
 Nepoch = args.Nepoch                       # nb of training epochs for the NNPs
-request = args.request                     # action requested to the adaptive
-stepNB = args.stepNB                       # step number of the adaptive learning, used to name the output files
+request = args.request                     # action requested to the active
+stepNB = args.stepNB                       # step number of the active learning, used to name the output files
 nnodes = args.nnodes                       # nb of nodes used for this job 
 minimize = args.minimize                   # which quantity to be minimized between the NNPs 
 minimize = check_minimize(minimize)     
@@ -32,7 +32,7 @@ p_logfile = path+"/"+logfile
 ###############################################################################################################
 if request == 'init':
     ITERATION = 0
-    AT = AdaptiveTraining(request     = request,
+    AT = ActiveTraining(request     = request,
                           stepNB      = stepNB,
                           Nadd        = Nadd,
                           Nepoch      = Nepoch,
@@ -46,7 +46,7 @@ if request == 'init':
                           GammaPoint  = GammaPoint)
 
     out = f"""├──────────────────────────────────────────────────────────────────────────────────
-│        Starting Adaptive Learning Calculation on {time.strftime('%Y-%m-%d', time.gmtime())}            [{time.strftime('%H:%M:%S', time.gmtime())}]
+│        Starting Active Learning Calculation on {time.strftime('%Y-%m-%d', time.gmtime())}            [{time.strftime('%H:%M:%S', time.gmtime())}]
 ├──────────────────────────────────────────────────────────────────────────────────
 ├──────────────────────▶︎        ADAPTIVE   STEP   NB    {stepNB}     
 ├──────────────────────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ else:
         """, flush=True)
         exit()
     Nadd, Nepoch, minimize, ITERATION, StokIndPairs = readlogfile(logfile = logfile)  # indexes necessary for the "updates" option
-    AT = AdaptiveTraining(request     = request,
+    AT = ActiveTraining(request     = request,
                           stepNB     = stepNB,
                           Nadd        = Nadd,
                           Nepoch      = Nepoch,

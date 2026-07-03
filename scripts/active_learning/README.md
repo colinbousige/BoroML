@@ -44,13 +44,13 @@ Template files are centralized in `templates/`:
 Recommended: create a run directory from templates with the helper script:
 
 ```bash
-scripts/adaptive_learning/init_run_dir.sh <your-run-directory>
+scripts/active_learning/init_run_dir.sh <your-run-directory>
 ```
 
 Use `--force` to overwrite existing files in the run directory:
 
 ```bash
-scripts/adaptive_learning/init_run_dir.sh <your-run-directory> --force
+scripts/active_learning/init_run_dir.sh <your-run-directory> --force
 ```
 
 Manual alternative:
@@ -58,13 +58,13 @@ Manual alternative:
 Copy templates into your run directory, then adapt to your cluster settings before launching jobs:
 
 ```bash
-cp /path/to/BoroML/scripts/adaptive_learning/templates/* .
+cp /path/to/BoroML/scripts/active_learning/templates/* .
 ```
 
 If you are running from the repository root:
 
 ```bash
-cp scripts/adaptive_learning/templates/* <your-run-directory>/
+cp scripts/active_learning/templates/* <your-run-directory>/
 ```
 
 ## 2) Quick start for one AL step

@@ -5,7 +5,7 @@
 
 if [ $# -ne 3 ]; then
     echo "    Usage: $0 step_number input.data lauch_job"
-    echo "   step_number : number of the adaptive learning step (0 if first step)"
+    echo "   step_number : number of the active learning step (0 if first step)"
     echo "   lanch job YES/NO"
     exit 1
 fi

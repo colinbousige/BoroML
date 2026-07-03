@@ -10,8 +10,8 @@ if [ $# -lt 1 ]; then
         echo "   goal init AL_step_nb"
         echo "   ---- ---- ----------"
         echo "      > to initialiaze parameters, directories ... "
-        echo "      >> AL_step_nb : Adaptive Learning step number"
-#        echo "      >> launch Adaptive Learning Phase ? YES/NO"
+        echo "      >> AL_step_nb : Active Learning step number"
+#        echo "      >> launch Active Learning Phase ? YES/NO"
         echo
         echo "   goal sel_inp input.data struct_nb output.data"
         echo "   ---- ------- ---------- --------- -----------"
@@ -22,39 +22,39 @@ if [ $# -lt 1 ]; then
         echo "   goal train AL_step_nb input.data launch"
         echo "   ---- ----- ---------- ---------- ------"
         echo "      > create X_TRAIN directory, copy files for training"
-        echo "      >> AL_step_nb : Adaptive Learning step number"
+        echo "      >> AL_step_nb : Active Learning step number"
         echo "      >> input.data : n2p2 file containing structures for training"
         echo "      >> launch training ? YES/NO"
         echo
         echo "   goal xMDs AL_step_nb epoch_nb launch"
         echo "   ---- ---- ---------- ---------------"
         echo "      > create MD directories, copy necessary files, create jobs, ..."
-        echo "      >> AL_step_nb : Adaptive Learning step number"
+        echo "      >> AL_step_nb : Active Learning step number"
         echo "      >> epcoh_nb : weights parameters from training epoch_nb will be taken for n2p2 potential"
         echo "      >> launch MD tests ? YES/NO"
         echo
         echo "   goal get_EWnb AL_step_nb"
         echo "   ---- -------- ----------"
         echo "      > create a file : \${STEP}_EW.txt with the nb of EW per MD test simulation"
-        echo "      >> AL_step_nb : Adaptive Learning step number"
+        echo "      >> AL_step_nb : Active Learning step number"
         echo
         echo "   goal EW_DFT AL_step_nb launch"
         echo "   ---- ------ ---------- ------"
         echo "      > perform DFT calculations on selected EW structures from MD tests"
-        echo "      > creates a new \${STEP}input.data file for a new Adaptive Learning phase"
-        echo "      >> AL_step_nb : Adaptive Learning step number"
+        echo "      > creates a new \${STEP}input.data file for a new Active Learning phase"
+        echo "      >> AL_step_nb : Active Learning step number"
         echo "      >> launch DFT calculations ? YES/NO"
         echo
         echo "   goal rnw_stck AL_step_nb launch"
         echo "   ---- -------- ---------- ------"
         echo "      > generate random structures from EW structures from MD tests"
-        echo "      >> AL_step_nb : Adaptive Learning step number"
+        echo "      >> AL_step_nb : Active Learning step number"
         echo "      >> launch jobs ? YES/NO"
         echo
         echo "  goal crt_stck AL_step_nb"
         echo "   ---- ------- ----------"
-        echo "      > creates a new \${STEP+1}_STOCK.data file for a new Adaptive Learning phase"
-        echo "      >> AL_step_nb : Previous Adaptive Learning step number, this will be implemented for the new adapative phase"
+        echo "      > creates a new \${STEP+1}_STOCK.data file for a new Active Learning phase"
+        echo "      >> AL_step_nb : Previous Active Learning step number, this will be implemented for the new adapative phase"
         echo
         echo "  goal div_data inpfile.data div outfile.data"
         echo "   ---- ------- ----------"
@@ -63,8 +63,8 @@ if [ $# -lt 1 ]; then
         echo "   goal rnw_dataset AL_step_nb old_input.data"
         echo "   ---- ----------- ---------- --------------"
         echo "      > generate the new dataset from old one enriched with DFT computed EW structures"
-        echo "      > creates a new \${STEP}_input.data file for the new Adaptive Learning phase"
-        echo "      >> AL_step_nb : Current Adaptive Learning step number"
+        echo "      > creates a new \${STEP}_input.data file for the new Active Learning phase"
+        echo "      >> AL_step_nb : Current Active Learning step number"
         echo "      >> old_input.data : Old input.data n2p2 file"
         echo
         exit
@@ -81,7 +81,7 @@ case "$1" in
             echo "Missing Arguments"
             exit
         fi
-        ${NAPSDIR}/init_adaptive.sh $2
+        ${NAPSDIR}/init_active.sh $2
         ;;
     "sel_inp")
         if [ $# -lt 4 ] ; then

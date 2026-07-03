@@ -6,14 +6,14 @@
 
 if [ $# -lt 2 ]; then
         echo
-        echo "   WARNING USAGE SHOULD BE: $0 Adaptive_input_file parameter "
-        echo "   Adaptive_input_file : file containing all parameters"
-        echo "   Parameter : the expected parameter read in the Adaptive_input_file"
+        echo "   WARNING USAGE SHOULD BE: $0 Active_input_file parameter "
+        echo "   Active_input_file : file containing all parameters"
+        echo "   Parameter : the expected parameter read in the Active_input_file"
         echo "   Parameters may be:"
         echo "Defining Environments  :        * PYTHON_ENV        * JOB_ENV          * LAMMPS_ENV"
         echo "                       :        * VASP_ENV          * N2P2_ENV"
         echo
-        echo "Adaptive Learning      :        * NB_NODES_AL       * STOCK_FILE_SIZE   * NB_NNP"
+        echo "Active Learning      :        * NB_NODES_AL       * STOCK_FILE_SIZE   * NB_NNP"
         echo "Parameters             :        * NNP_ELEMENTS      * NNP_FILES_AL      * NB_AL_CYCLES"
         echo "                       :        * NADD"
         echo

@@ -6,7 +6,7 @@ then
     echo -e "\033[1;31m!!! You need to specify the node to run the computation.\033[0m"
     echo ""
     echo "Usage:"
-    echo -e "\033[93m\033[1mxjobadaptive node26...\033[0m"
+    echo -e "\033[93m\033[1mxjobactive node26...\033[0m"
     echo ""
     exit
 fi
@@ -31,15 +31,15 @@ PAT=`pwd`
 get_index $1
 
 echo "#!/bin/bash
-#SBATCH -J adaptive_training
+#SBATCH -J active_training
 #SBATCH -A theochem
 #SBATCH -p ${queue[$index]}
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -w ${nodes[$index]}
 #SBATCH -t UNLIMITED
-#SBATCH -e $PAT/adaptive_training.err
-#SBATCH -o $PAT/adaptive_training.out
+#SBATCH -e $PAT/active_training.err
+#SBATCH -o $PAT/active_training.out
 
 export OMP_NUM_THREADS=1
 export PATH=\$PATH:\$HOME/anaconda3/bin
@@ -48,11 +48,11 @@ export VASP_PP_PATH=\$HOME/Boro_ML/bin/inputs_VASP
 PYTHONBIN=\$HOME/anaconda3/bin/python
 
 PAT=$PAT
-cp \$HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py \$PAT
+cp \$HOME/Boro_ML/bin/active_learning/active_training.py \$PAT
 cd \$PAT
-\$PYTHONBIN adaptive_training.py
+\$PYTHONBIN active_training.py
 
-" > jobadaptive
-chmod u+x jobadaptive
+" > jobactive
+chmod u+x jobactive
 
-sbatch jobadaptive
+sbatch jobactive

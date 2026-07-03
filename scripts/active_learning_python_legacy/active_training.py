@@ -1,6 +1,6 @@
 #!/usr/local/bin/python3
 
-from adaptive_learning import *
+from active_learning import *
 
 # Create a Cluster object:
 lynxvasp = Cluster(preferred_node = 'l-node04',
@@ -10,8 +10,8 @@ lynxnnp  = Cluster(preferred_node = 'l-node04',
                    forbid_nodes   = ['node31', 'l-gnode01'],
                    forbid_queues  = ['tc1', 'tc5', 'cl24'])
 
-# Initialize an AdaptiveTraining object:
-AT = AdaptiveTraining(Nadd        = 50, 
+# Initialize an ActiveTraining object:
+AT = ActiveTraining(Nadd        = 50, 
                       Nepoch      = 20,
                       restart     = False,
                       clusterNNP  = lynxnnp,
@@ -23,5 +23,5 @@ AT = AdaptiveTraining(Nadd        = 50,
 # /!\ Set to restart=True if restarting after stopping job, 
 # /!\ otherwise it will restart from scratch!
 
-# Run the AdaptiveTraining object:
+# Run the ActiveTraining object:
 AT.run()

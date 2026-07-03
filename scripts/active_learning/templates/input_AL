@@ -46,7 +46,7 @@ CELL_VAR_Y -2 0 2
 # CELL_VAR_Z: list of box-scale variations (%) along Z.
 CELL_VAR_Z 0
 # LAMMPS_INPUT: LAMMPS instruction/input script filename.
-# Default template available in repository: scripts/adaptive_learning/templates/input.lmp
+# Default template available in repository: scripts/active_learning/templates/input.lmp
 LAMMPS_INPUT input.lmp
 # LAMMPS_DAT_FILES: one or more LAMMPS structure/data files for MD tests.
 LAMMPS_DAT_FILES structure_Ag111.data

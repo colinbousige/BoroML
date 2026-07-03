@@ -31,7 +31,7 @@ class Cluster:
         Add nodes to the list of forbidden nodes.
     
     ## Usage
-    >>> from adaptive_learning import *
+    >>> from active_learning import *
     >>> lynx = Cluster()
     >>> lynx.get_free_nodes()
     NodeName  CPUTot  CPUAlloc  CPUFree Partitions  State

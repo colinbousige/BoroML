@@ -38,10 +38,10 @@ class SlurmJob:
         Assign to available node. If no available node, queue to `preferred_node` on half the total CPUs.
     
     ## Usage
-    >>> from adaptive_learning import *
+    >>> from active_learning import *
     >>> import os
     >>> lynx = Cluster()
-    >>> AT = AdaptiveTraining(Nadd=20, restart=False)
+    >>> AT = ActiveTraining(Nadd=20, restart=False)
     >>> # Without launching job directly
     >>> scaling1 = SlurmJob(
     ...     type    = 'nnp-scaling', 

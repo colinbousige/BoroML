@@ -18,9 +18,9 @@ from .functions import *
 from .SlurmJob import SlurmJob
 from .env import *
 
-class AdaptiveTraining:
+class ActiveTraining:
     """
-    A class to perform an Adaptive Training
+    A class to perform an Active Training
     
     """
     
@@ -38,13 +38,13 @@ class AdaptiveTraining:
                  ITERATION:int   = 0,
                  GammaPoint      = "False"):
         self.request = request                            # request type
-        self.stepNB = stepNB                              # step number of the adaptive learning, used to name the output files   
+        self.stepNB = stepNB                              # step number of the active learning, used to name the output files   
         self.path = path                                  # Working directory
         self.nNNP = nNNP                                  # Numbers of NNPs: gotten from the number of 'inputX.nn' files
         self.nnodes = nnodes                              # Nb of nodes used in this job
         self.Nstock = Nstock                              # nb of stock files
         self.logfile = logfile                            # status logfile where output are written
-        self.ITERATION = ITERATION                        # ITERATION of the adaptive learning procedure
+        self.ITERATION = ITERATION                        # ITERATION of the active learning procedure
         self.Nadd = Nadd                                  # Structures to add at each iteration"""
         self.Nepoch = Nepoch                              # nb of the NNPs training epochs
         self.minimize = minimize
@@ -371,8 +371,8 @@ class AdaptiveTraining:
         Plot RMSE of training of NNPs
         Parameters:
         -----------
-        i: int, Adaptive learning Iteration 
-        save: bool, save the learning curves of the of the NNP's through the training (single Adaptive learning iteration)
+        i: int, Active learning Iteration 
+        save: bool, save the learning curves of the of the NNP's through the training (single Active learning iteration)
         forces: bool, if True beside the RMSE of energies, the RMSE of forces for the NNP's is also recorded.
         Return:
         ------

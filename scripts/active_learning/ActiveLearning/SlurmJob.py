@@ -32,12 +32,12 @@ class SlurmJob:
         self.nNNP          = nNNP                # nb of NNPs
         self.NNP           = NNP                 # NNP Id
         self.nnodes        = nnodes              # nb of nodes
-        self.stepNB        = stepNB              # step number of the adaptive learning
+        self.stepNB        = stepNB              # step number of the active learning
         self.Nstock        = Nstock              # nb of stock files
-        self.ITERATION     = ITERATION           # Adaptive Learning ITERATION
-        self.logfile       = logfile             # status file of the adaptive learning calculations
+        self.ITERATION     = ITERATION           # Active Learning ITERATION
+        self.logfile       = logfile             # status file of the active learning calculations
         self.type          = type                # Type of job, one of 'vasp', 'scaltrainpred'
-        self.path          = path                # Path of the adaptive learning job
+        self.path          = path                # Path of the active learning job
         self.jobname       = jobname             # Name of the jobfile
         self.nameinjob     = nameinjob           # Name of the job in Slurm job file
         self.GammaPoint    = GammaPoint          # to select the appropriate vasp executable

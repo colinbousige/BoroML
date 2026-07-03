@@ -6,7 +6,7 @@
 if [ $# -lt 2 ]; then
         echo
         echo "   WARNING USAGE SHOULD BE: $0 step_number YES/NO "
-        echo "   step_number : number of the adaptive learning step (0 if first step)"
+        echo "   step_number : number of the active learning step (0 if first step)"
         echo "   YES/NO : launch the jobs that have been created ?"
         echo
         exit

@@ -3,7 +3,7 @@
 if [ $# -lt 3 ]; then
         echo
         echo "   WARNING USAGE SHOULD BE: $0 step_number X YES/NO "
-        echo "   step_number : number of the adaptive learning step (0 if first step)"
+        echo "   step_number : number of the active learning step (0 if first step)"
         echo "   X : nb of EW structure to be converted to POSCARS for each LAMMPS trajectory"
         echo "   YES/NO : launch the jobs that have been created ?"
         echo "   atoms for NNP: list atoms of the system, ex : HOAlSi"

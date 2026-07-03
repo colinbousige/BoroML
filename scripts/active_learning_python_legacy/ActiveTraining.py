@@ -16,9 +16,9 @@ from .functions import read_inputdata, write_inputdata, print_success_message
 from .SlurmJob import SlurmJob
 from .Cluster import Cluster
 
-class AdaptiveTraining:
+class ActiveTraining:
     """
-    A class to perform an Adaptive Training
+    A class to perform an Active Training
     
     ## Parameters
     `path`: str. Default = `os.getcwd()`
@@ -90,9 +90,9 @@ class AdaptiveTraining:
     `write2log(self, N:int, RMSE1:float, RMSE2:float, dEmean:float,`
         Write N, RMSE1, RMSE2, dEmean, dEstd to `self.path/training.csv`
     
-    ## Usage (see sample script in `adaptive_training.py`)
-    >>> from adaptive_learning import *
-    >>> training = AdaptiveTraining(restart=False)
+    ## Usage (see sample script in `active_training.py`)
+    >>> from active_learning import *
+    >>> training = ActiveTraining(restart=False)
     """
     
     def __init__(self, 
@@ -130,7 +130,7 @@ class AdaptiveTraining:
             self.minimize = "energy"
         if self.minimize.lower() in ['f', 'force']:
             self.minimize = "forces"
-        """During the adaptive training, the quantity to compare between NNP1 and NNP2. 
+        """During the active training, the quantity to compare between NNP1 and NNP2. 
         If "energy", the energy difference is minimized. If "force", the force difference is minimized."""
         self.initialize()
         if Nepoch is None:
@@ -157,7 +157,7 @@ class AdaptiveTraining:
         """Energy cutoff for VASP calculations"""
         self.write_vasp_files(path='vasp') # write INCAR, KPOINTS, POTCAR files
         print("""─────────────────────────────────────────────────────────────
-*   Adaptive construction of the dataset for NNP training   *
+*   Active construction of the dataset for NNP training   *
 ─────────────────────────────────────────────────────────────""", flush=True)
         print(self.__str__())
         if self.restart == False and Path(f"{self.path}/EW.data").is_file():
@@ -374,8 +374,8 @@ class AdaptiveTraining:
         Plot RMSE of training of NNPs
         Parameters:
         -----------
-        i: int, Adaptive learning Iteration 
-        save: bool, save the learning curves of the of the NNP's through the training (single Adaptive learning iteration)
+        i: int, Active learning Iteration 
+        save: bool, save the learning curves of the of the NNP's through the training (single Active learning iteration)
         forces: bool, if True beside the RMSE of energies, the RMSE of forces for the NNP's is also recorded.
         Return:
         ------
@@ -967,7 +967,7 @@ class AdaptiveTraining:
 
     def run(self):
         """
-        Run the adaptive training
+        Run the active training
         """
         for i in range(1, self.Niter+1):
             Nstruct = self.get_Nstruct(copy=True)
