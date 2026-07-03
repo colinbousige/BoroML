@@ -1,7 +1,7 @@
 """
 Set of functions to generate borophene structures on metal substrates and write LAMMPS input files for MD simulations.
 
-Copyright (c) 2025 Colin Bousige 
+Copyright (c) 2025 Colin Bousige
 Licensed under the MIT License
 """
 
@@ -68,7 +68,8 @@ predef = {'alpha'  :(3,3,[0,10]), #alpha
           'island9':(3,6,[1,2,3,5,6,7,8,9,10,11,12,13,15,16,17,18,19,25,26,27,28,23,29,30,31,32,35,21,20,34]),
           'island10':(3,6,[1,2,3,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,25,26,27,28,29,30,31,32,34,35]),
           'island11':(3,6,[0,1,2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,24,25,26,27,28,29,31,32,34,35]),
-          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35])
+          'island12':(3,6,[2,4,8,9,13,14,16,18,19,22,23,26,28,29,32,33,34,35]),
+          'noBoro':(1,2,[0,1,2,3])
           }
 """Dict of predefined borophene structures:  'name': nx, ny, [listholes]"""
 
@@ -218,7 +219,6 @@ dump_modify    dmp{jobname} flush yes sort id element B {substrate}"""
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-fix_modify     md{jobname} temp mytemp
 {mymd}
 run            {N}
 unfix          md{jobname}
@@ -235,7 +235,6 @@ dump_modify    dmp{jobname} flush yes sort id element B {substrate}
         if MDtype == "npt":
             mymd += f" iso ${{P}} ${{P}} $(1000.0*dt)"
         MDrun += f"""
-fix_modify  md{jobname} temp mytemp
 {mymd}
 run         {N}
 unfix       md{jobname}
@@ -655,10 +654,10 @@ def create_structure(
             nx, ny, listholes = predef[allotrope]
         else:
             sys.exit(f"Unknown allotrope: {allotrope}.")
-    aa = 1.62*2*np.cos(30*np.pi/180)
-    bb = 1.62
+    aa = 1.7*2*np.cos(30*np.pi/180)
+    bb = 1.7
     cc = 2.5
-    if len(listholes)>0:
+    if len(listholes)>0 or island_size>0:
         structbase = Atoms('BB', pbc=[1,1,0], 
                             positions = [(0,0,0),(aa/2,bb/2,0)], 
                             cell = [aa,bb,cc])
@@ -958,6 +957,8 @@ def create_structure(
                 randstruct += Atoms('B', positions=[[x,y,z]])
                 MIN = mindist(randstruct)
             struct = randstruct.copy()
+    # make sure the lowest z is at z=0
+    struct.positions[:, 2] -= np.min(struct.positions[:, 2])
     return(struct)
 
 

@@ -3,7 +3,7 @@
 """
 Create a file for one structure with the given parameters. Output to stdout.
 
-Copyright (c) 2025 Colin Bousige 
+Copyright (c) 2025 Colin Bousige
 Licensed under the MIT License
 """
 
@@ -12,6 +12,7 @@ import numpy as np
 import sys
 import argparse
 from ase.constraints import FixAtoms
+import textwrap
 
 
 def write_inputdata(atom, comment):
@@ -173,13 +174,23 @@ def main(args):
     if out=='vasp':
         write(sys.stdout, images = struc, format = "vasp", vasp5 = True)
     elif out=='lammps':
+        substrate_str = substrate if substrate !='None' else 'NoSubstrate'
+        if substrate =='None':
+            a_str = ''
+        else:
+            a_str = f"a={a:.5f}" if a is not None else f"{metals[substrate]:.5f}"
         write_lammps(None, struc,
-            comments = f"# {allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+            comments = f"# {allotrope} {substrate_str} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} {a_str} size_min={size_min} vac={vac}")
     elif out=='xyz':
         write(sys.stdout, images = struc, format = "xyz")
     elif out=='n2p2':
+        substrate_str = substrate if substrate !='None' else 'NoSubstrate'
+        if substrate =='None':
+            a_str = ''
+        else:
+            a_str = f"a={a:.5f}" if a is not None else f"{metals[substrate]:.5f}"
         write_inputdata(struc, 
-            f"{allotrope} {substrate} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} a={a if a is not None else metals[substrate]:.5f} size_min={size_min} vac={vac}")
+            f"{allotrope} {substrate_str} {orientation} {nx}x{ny} nz={nz} vdw={vdw} Nboro={Nboro} {a_str} size_min={size_min} vac={vac}")
     else:
         raise ValueError(f"\n{bold}{orange}Unknown output format: {out}{normal}\n")
 
@@ -219,20 +230,35 @@ def main(args):
         view(struc)
 
 
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
+
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def add_argument(self, *args, help=None, default=None, **kwargs):
-        if help is not None:
-            kwargs["help"] = help
-        if default is not None and args[0] != "-h":
-            kwargs["default"] = default
-            if help is not None:
-                kwargs["help"] += f"\n{orange}Default: {default}{normal}"
-        super().add_argument(*args, **kwargs)
-
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
 
 def get_parser():
     """ The argument parser of the command-line version """
-    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
     description=f"""
 {bold}{orange}Create a file for one structure with the given parameters. Output to `stdout` and shows structure parameters in `stderr`. Usage: `xgenerate-structure -al beta12 -sm 10 > POSCAR`.{normal}
 """)

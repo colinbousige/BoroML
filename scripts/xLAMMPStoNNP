@@ -3,7 +3,7 @@
 """
 Get all LAMMPS structures within a `tests/` folder, and gather them in `stock.data`
 
-Copyright (c) 2025 Colin Bousige 
+Copyright (c) 2025 Colin Bousige
 Licensed under the MIT License
 """
 

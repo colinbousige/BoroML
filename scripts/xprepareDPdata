@@ -1,5 +1,6 @@
 #!/usr/local/bin/python3
 
+
 """
 Prepare the training and validation datasets for DeepMD training from n2p2's input.data file.
 This script splits the input.data file into multiple files, each containing a section of the data, and converts them into the DeepMD format.
@@ -9,7 +10,6 @@ This script can be run from the command line or imported as a module.
 Copyright (c) 2025 Colin Bousige 
 Licensed under the MIT License.
 """
-
 
 import dpdata
 import numpy as np

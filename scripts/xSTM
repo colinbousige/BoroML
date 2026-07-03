@@ -1,0 +1,351 @@
+#!/usr/local/bin/python3
+
+'''
+                                  =============
+                                  STM-2DScan.py
+                                  =============
+
+---------------------------------------------------------------------------------
+Introduction:
+
+STM-2DScan.py is a postprocessing script for VASP code to generate STM images 
+based on DFT-calculations. It firstly imports volumetric data from a file with 
+CHGCAR format (e.g. CHGCAR, PARCHG and CURRENT (output data file of BSKAN)...) 
+and then interpolates the data onto specified two-dimensional (2D) slice in an 
+arbitrary xy-plane, which will be saved as a '.png' format file.
+
+This script is a free software, which means that you can redistribute it or 
+modify it under the terms of the GNU General Public License. Of course, any 
+feedback of modifications, bug fixes and improvements is appreciate.
+
+---------------------------------------------------------------------------------
+Usage:
+
+Step1. Setting the height of tip position.  
+
+Step2. Selecting a scan mode to obtain the 2D slice for visualization. There 
+       are three types optional scan modes, including two common types: the 
+       constant-height mode and the constant-current mode. The working 
+       mechanism of these two modes are similar to the ways of stm.scan and 
+       stm.scan2 functions in ASE (You can visit the website of ASE to learn 
+       about more details). More simply, you also can select the third mode 
+       to make the 2D slice by cutting a xy-plane at a given height from 3D 
+       charge density. Although this mode produces almost the same result as 
+       that of the constant-height mode, allowing for more general applica-
+       tions, e.g. display a 2D image of CHGCAR or CURRENT (Of course, VESTA 
+       or other software can do it better).
+
+Step3. Optionally, you can replicate the unit-cell by inputting the cell ranges
+       along a and b vectors, respectively.
+
+Step4. Plot the 2D contour by using matplotlib and save as a .png format image.
+       Multifarious colormaps included with matplotlib are available, allowing 
+       you to choose your favorite one.
+
+---------------------------------------------------------------------------------
+Important Notes: 
+
+1. This script runs in the Python3 environment.
+
+2. The script depends on the following python modules and packages:
+    numpy - http://numpy.scipy.org/                                  
+    ase - https://wiki.fysik.dtu.dk/ase/            
+    matplotlib - http://matplotlib.sourceforge.net/
+    
+   If your OS doesn’t have above packages installed, you can install 
+   them using a command like:
+    pip install --upgrade numpy ase matplotlib
+
+3. Multifarious colormaps included with matplotlib are alternative. 
+   See https://matplotlib.org/examples/color/colormaps_reference.html
+   for more details.
+
+4. Reading the charge density file is a time-consuming progress, which may 
+   cost a few seconds (even reach to the order of minutes).
+     
+---------------------------------------------------------------------------------
+Author: ShuangLeung (sleung1924@gmail.com)                         
+Date of last version: 2019/08/30
+---------------------------------------------------------------------------------
+Modification: Colin Bousige (colin.bousige@cnrs.fr)
+Changed the original code to be able to easily run it as a command-line script.
+Date of last version: 2023/09/29
+---------------------------------------------------------------------------------
+'''
+
+import argparse
+import os
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+from ase.calculators.vasp import VaspChargeDensity
+
+boldorange = "\033[93m\033[1m"
+orange = "\033[93m"
+normal = "\033[0m"
+
+colmap = {"0": "afmhot",
+          "1": "gray",
+          "2": "bone",
+          "3": "gist_heat",
+          "4": "gnuplot",
+          "5": "gnuplot2",
+          "6": "CMRmap",
+          "7": "jet",
+          "8": "viridis",
+          "9": "plasma",
+          "10": "inferno",
+          "11": "magma",
+          "12": "cividis",
+          "13": "copper"
+          }
+
+scanmode = {"1":"Constant-height mode;",
+            "2":"Constant-current mode",
+            "3":"2D-slice at a specified height."}
+
+def main(args):
+    heights  = args.heights
+    m        = args.supercella
+    n        = args.supercellb
+    color    = args.color
+    set_scan = args.scan
+    show_axes = args.show_axes
+    show_colorbar = args.show_colorbar
+
+    print("-"*86)
+    print("Starting the program at")
+    print(time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("-"*86)
+
+    # Check if the PARCHG exists and import charge density data from it.
+    # If not, enter the filename of CHGCAR/PARCHG format file containing charge density data.
+    if os.path.exists("PARCHG"):
+        print("PARCHG file already exists, reading data now...\n") 
+        vasp_charge = VaspChargeDensity('PARCHG')
+        density = vasp_charge.chg[-1]
+        atoms = vasp_charge.atoms[-1]
+        del vasp_charge
+        print("Done!\n")
+
+    else:
+        namefile = "CHGCAR"
+        if os.path.exists(namefile):
+            print("\nReading charge density data from %s...\n" %namefile)
+            vasp_charge = VaspChargeDensity(filename= namefile)
+            density = vasp_charge.chg[-1]
+            atoms = vasp_charge.atoms[-1]
+            del vasp_charge
+            print("Done!\n")
+        else:
+            print("\n*** ERROR: The input filename doesn't exist!!! Please retype the filename again. ***\n")
+            exit
+
+    topatom = max(atoms.positions[:,2])
+
+    # Read size of XYZ grids.
+    ngridpoints = np.array(density.shape)
+
+    # Read scaling factor and unit cell of the crystal structure.
+    unit_cell = atoms.get_cell()
+    cell_lengths = np.sqrt(np.dot(unit_cell,unit_cell.transpose()).diagonal())
+
+    # Select the scan mode to get the visualization of 2D slice
+    #inputstr3 = input("\nSelect the STM scan mode to obtain 2D slice for visualization:\n %s %s %s %s" % ("1: Constant-height mode;[Default option]\n",
+    #                                "2: Constant-current mode;\n",
+    #                                "3: 2D-slice at a specified height.\n",
+    #                                "Enter your option [1/2/3]:"))
+    scan_mode_option = set_scan
+    # Set the default option.
+    scan_mode_options = ["1","2","3"]
+    if scan_mode_option not in scan_mode_options:
+        print("\n*** WARNING: the input has syntax errors. Select the constant-height mode automatically. ***\n")
+        scan_mode_option = "1"
+
+    # Input the height(s) (in Angstroms) of tip position to make the 2D slice(s).
+    # Find the integer plane(s) (scan_mode_option==1/2) or 
+    # the closest plane(s) (scan_mode_option==3) corresponding to the input height(s).
+
+    # Make a supercell.
+    # The size of grids along a/b vector.
+    supercell_xngridpoints = (ngridpoints[0]-1)*m+1
+    supercell_yngridpoints = (ngridpoints[1]-1)*n+1
+
+    # Make arrays of x and y values.
+    supercell_xarray = np.zeros((supercell_xngridpoints,supercell_yngridpoints),float)
+    supercell_yarray = np.zeros((supercell_xngridpoints,supercell_yngridpoints),float)
+
+    # Make arrays of supercell_density2D/I/H with the same dimensions as x/y arrays.
+    supercell_density2D = np.zeros((supercell_xngridpoints,supercell_yngridpoints),float)
+    I = np.zeros((supercell_xngridpoints,supercell_yngridpoints),float)
+    H = np.zeros((supercell_xngridpoints,supercell_yngridpoints),float)
+
+    #Find projection of b vector onto a vector.
+    ytox = np.dot(unit_cell[0],unit_cell[1].T)/cell_lengths[0]
+    #Find component of b vector perpendicular to a vector.
+    ynormal = np.cross(unit_cell[0],unit_cell[1].T)/cell_lengths[0]
+    ynormal = np.sqrt(np.dot(ynormal,ynormal.T))
+
+    # Plot the STM-2Dscan images in matplotlib.
+    # Multifarious colormaps included with matplotlib are alternative.
+    colormaps = ['afmhot','gray','bone','gist_heat','gnuplot','gnuplot2','CMRmap','jet','viridis','plasma','inferno','magma','cividis','copper']
+
+    colormaps_option = color
+    colormaps_options = []
+    for i in range(len(colormaps)):
+        colormaps_options.append(str(i))
+
+    if colormaps_option in colormaps_options:
+        cmap_No = int(colormaps_option)
+    else:
+        print("\n*** WARNING: the input has syntax errors. Select the default option automatically. ***\n")
+        cmap_No = 0
+
+    print("\nGenerating STM-2Dslice images...\n")
+    for hh in heights:
+        h = topatom + hh
+        # Contant height mode.
+        if scan_mode_option == "1":
+            n1 = h/cell_lengths[2]*ngridpoints[2]
+            dn1 = n1-np.floor(n1)
+            n1 = int(n1)%ngridpoints[2]
+            ldos = (1-dn1)*density[:,:,n1]+dn1*density[:,:,(n1+1)%ngridpoints[2]]
+
+        # Contant current mode.
+        elif scan_mode_option == "2":
+            n2 = h/cell_lengths[2]*ngridpoints[2]
+            dn2 = n2-np.floor(n2)
+            n2 = int(n2)%ngridpoints[2]
+            # Get the averaged current.
+            averaged_current = ((1-dn2)*density[:,:,n2].mean()+dn2*density[:,:,(n2+1)%ngridpoints[2]].mean())
+            c1 = density[:,:,n2]
+            c2 = density[:,:,(n2+1)%ngridpoints[2]]
+        
+        # 2D-slice at a specified height.
+        else:
+            plane_index = int(round(h/cell_lengths[2]*ngridpoints[2]))%ngridpoints[2]
+            density2D = density[:,:,plane_index]
+            
+        for i in range(supercell_xngridpoints):
+            for j in range(supercell_yngridpoints):
+                supercell_xarray[i][j] = float(i)/float(supercell_xngridpoints)*cell_lengths[0]*m+float(j)/float(supercell_yngridpoints)*ytox*n
+                supercell_yarray[i][j] = float(j)/float(supercell_yngridpoints)*ynormal*n
+                mi = i%(ngridpoints[0]-1)
+                nj = j%(ngridpoints[1]-1)
+                if scan_mode_option == "1":
+                    I[i][j] = ldos[mi][nj]
+                elif scan_mode_option == "2":
+                    if c2[mi][nj]-c1[mi][nj] == 0:
+                        H[i][j] = n2*cell_lengths[2]/ngridpoints[2]
+                    else:
+                        H[i][j] = (n2+(averaged_current-c1[mi][nj])/(c2[mi][nj]-c1[mi][nj]))*cell_lengths[2]/ngridpoints[2]
+                else:
+                    supercell_density2D[i][j] = density2D[mi][nj]
+
+        # Plot the 2D contour in matplotlib. 
+        # The newly generated images will be named after the letter "H/C/S"(constant-height mode/constant-current mode/2D-slice)
+        # and height value (of tip position).
+        if scan_mode_option == "1":
+            P = I
+            mode_label = "H" 
+        elif scan_mode_option == "2":
+            P = H
+            mode_label = "C"
+        else:
+            P = supercell_density2D
+            mode_label = "S"
+
+        plt.figure()
+        plt.rcParams['figure.max_open_warning'] = 50
+        plt.gca()
+        if show_axes is False:
+            plt.axis('off')
+            plt.xticks(())
+            plt.yticks(())
+        else:
+            plt.xlabel('x [Å]')
+            plt.ylabel('y [Å]')
+        cm = plt.colormaps[colormaps[cmap_No]]
+        # plt.contourf(supercell_xarray,supercell_yarray,P, 900, cmap=cm)
+        x = np.linspace(0,cell_lengths[0]*m,supercell_xngridpoints)
+        y = np.linspace(0,cell_lengths[1]*n,supercell_yngridpoints)
+        Y,X = np.meshgrid(y,x)
+        plt.contourf(X,Y,P, 900, cmap=cm)
+        if show_colorbar is True:
+            plt.colorbar()
+        plt.gca().set_aspect('equal')
+        plt.savefig(f"{mode_label}_{round(hh,3)}.png", dpi=300,bbox_inches='tight',pad_inches=0.0)
+
+    print("Done!\n")
+
+    print("-"*86)
+    print("Ending program at")
+    print(time.strftime("%Y-%m-%d %H:%M:%S"))
+    print("-"*86)
+
+
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        if help is not None:
+            kwargs['help'] = help
+        if default is not None and args[0] != '-h':
+            kwargs['default'] = default
+            if help is not None:
+                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
+        super().add_argument(*args, **kwargs)
+
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    description=f"""
+{boldorange}Compute STM image from PARCHG file{normal}
+""")
+    parser.add_argument('--heights','-H',
+                        help="List of heights of tip position with respect to the top atom.",
+                        default=[1.0],
+                        nargs="*",
+                        type=float)
+    parser.add_argument('--supercella',
+                        '-na',
+                        help="Multiply image along a",
+                        default="1",
+                        type=int)
+    parser.add_argument('--supercellb',
+                        '-nb',
+                        help="Multiply image along b",
+                        default="1",
+                        type=int)
+    parser.add_argument('--color',
+                        '-c',
+                        help=f"Color map number: {colmap}",
+                        default="0",
+                        type=str)
+    parser.add_argument('--scan',
+                        '-s',
+                        help=f"Scan mode: {scanmode}",
+                        default="2",
+                        type=str)
+    parser.add_argument('--show_axes',
+                        '-ax',
+                        help=f"Add to show x and y axes.",
+                        default = False, 
+                        action  = "store_true")
+    parser.add_argument('--show_colorbar',
+                        '-cb',
+                        help=f"Add to show colorbar.",
+                        default = False, 
+                        action  = "store_true")
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+    
+

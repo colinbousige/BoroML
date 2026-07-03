@@ -16,167 +16,477 @@ import argparse
 import numpy as np
 import pandas as pd
 import sys
+from tabulate import tabulate
 from ase.io import write
 from ase.build.tools import sort
 from ase.constraints import FixAtoms
 from read_write import *
+from tqdm import tqdm
+import textwrap
+import os
+from ase.calculators.singlepoint import SinglePointCalculator
+from ase.build import fcc111, fcc100, fcc110, make_supercell
+import pickle
 
 orange = "\033[93m"
-bold   = "\033[1m"
+bold = "\033[1m"
 normal = "\033[0m"
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def main(args):
-    input   = args.input
-    out     = args.out
-    slice   = args.slice
-    fixed   = args.fixed
-    rmSub   = args.rmSub
-    rmFE    = args.rmFE
+    input = args.input
+    out = args.out
+    slice = args.slice
+    fixed = args.fixed
+    rmSub = args.rmSub
+    rmFE = args.rmFE
     compVel = args.compVel
-    dt      = args.dt
-    suffix  = args.suffix
+    dt = args.dt
+    suffix = args.suffix
+    rattle = args.rattle
+    info = args.info
+    replicate = args.replicate
 
     if input is None:
-        sys.stderr.write(f"\n{bold}{orange}Input file name is missing.{normal}\n\n")
+        sys.stderr.write(
+            f"\n{bold}{orange}Input file name is missing.{normal}\n\n")
         sys.exit(1)
-    struc, structype = read(filename = input, slice = slice, cv = compVel, dt = dt)
-    
+
+    struc = []
+    structype = None
+    comments = []
+    for inpfile in input:
+        st, sttype, comm = read(
+            filename=inpfile, slice=slice, cv=compVel, dt=dt)
+        struc.extend(st)
+        structype = sttype
+        comments.extend(comm)
+
+    if args.wrap:
+        for atoms in struc:
+            _, _, c = atoms.cell.cellpar()[:3]
+            maxz = np.max(atoms.positions[:, 2])
+            if maxz > .9*c:  # atoms that went through the boundary
+                atoms.positions[atoms.positions[:, 2] > .9*c, 2] -= c
+            atoms.positions[:, 2] -= np.min(atoms.positions[:, 2])
+            atoms.wrap()
+
+    if args.filterEF[0] is not None or args.filterEF[1] is not None:
+        sys.stderr.write("Filtering structures based on:")
+        if args.filterEF[0] is not None:
+            sys.stderr.write(f"\n- Energy > {args.filterEF[0]} eV/atom ")
+        if args.filterEF[1] is not None:
+            sys.stderr.write(f"\n- Forces > {args.filterEF[1]} eV/Å ")
+        sys.stderr.write(f"...\n")
+        filtered_struc = []
+        filtered_comments = []
+        for i, st in tqdm(enumerate(struc), desc="Filtering structures", file=sys.stderr):
+            energy_per_atom = st.get_potential_energy()/len(st)
+            max_force = np.max(np.linalg.norm(st.get_forces(), axis=1))
+            to_filter = False
+            if args.filterEF[0] is not None:
+                if energy_per_atom > float(args.filterEF[0]):
+                    to_filter = True
+            if args.filterEF[1] is not None:
+                if max_force > float(args.filterEF[1]):
+                    to_filter = True
+            if not to_filter:
+                filtered_struc.append(st)
+                filtered_comments.append(comments[i])
+        sys.stderr.write(
+            f"{bold}{orange}-> {len(struc)-len(filtered_struc)}{normal} structures filtered out.\n\n")
+        struc = filtered_struc
+        comments = filtered_comments
+
+    # sort atoms by increasing mass
+    sorted_struc = []
+    for st in tqdm(struc, desc="Sorting atoms by mass", file=sys.stderr):
+        # Sort the atoms
+        sorted_st = st.copy()
+        sorted_st = sort(sorted_st, tags=sorted_st.get_masses())
+        # Copy the calculator and results
+        if st.calc is not None:
+            order = np.argsort(st.get_masses())
+            # Get forces and energy from the original atoms
+            forces = st.get_forces()
+            energy = st.get_potential_energy()
+            # Reorder forces to match the sorted atoms
+            forces = forces[order]
+            # Create a new calculator for the sorted atoms
+            sorted_st.calc = SinglePointCalculator(
+                atoms=sorted_st,
+                forces=forces,
+                energy=energy
+            )
+        sorted_struc.append(sorted_st)
+    struc = sorted_struc
+
     # Remove substrate layers if needed
     if rmSub is not None:
-        for i,st in enumerate(struc):
-            zpos = sorted(set(st.positions[:,2]))
-            del st[[ atom.index for atom in st if atom.symbol != 'B' and atom.position[2] <= zpos[rmSub-1]+.1 ]]
+        for i, st in enumerate(struc):
+            zpos = sorted(set(st.positions[:, 2]))
+            del st[[atom.index for atom in st if atom.symbol !=
+                    'B' and atom.position[2] <= zpos[rmSub-1]+.1]]
             struc[i] = st
     # Fix substrate layers if needed
     if fixed is not None:
-        for i,st in enumerate(struc):
-            zpos = sorted(set(st.positions[:,2]))
-            mask = [i for i,at in enumerate(st.get_chemical_symbols()) if 
-                    at != 'B' and st.positions[i,2] <= zpos[fixed-1]+.1]
-            c = FixAtoms(mask = mask)
+        for i, st in enumerate(struc):
+            zpos = sorted(set(st.positions[:, 2]))
+            mask = [i for i, at in enumerate(st.get_chemical_symbols()) if
+                    at != 'B' and st.positions[i, 2] <= zpos[fixed-1]+.1]
+            c = FixAtoms(mask=mask)
             st.set_constraint(c)
-            st = sort(st, tags = st.get_masses())
+            st = sort(st, tags=st.get_masses())
             struc[i] = st
+    # Add substrate layers if needed
+    if int(args.add_sub[2]) > 0:
+        metals = {'Ag': 4.0853, 'Au': 4.112, 'Al': 4.0495, 'Cu': 3.6149,
+                  'Pt': 3.9242, 'Ni': 3.5240, 'Ir': 3.8390}
+        metal = args.add_sub[0]
+        celpar = metals.get(metal, None)
+        surf_fonc = {'111': fcc111,
+                     '100': fcc100,
+                     '110': fcc110}.get(args.add_sub[1], None)
+        size = int(args.add_sub[2])
+        if celpar is None:
+            raise ValueError(
+                f"\n{bold}{orange}Unknown metal: {metal}. Must be one of: {list(metals.keys())}.{normal}\n")
+        if surf_fonc is None:
+            raise ValueError(
+                f"\n{bold}{orange}Unknown surface orientation: {args.add_sub[1]}. Must be one of: '111', '100' or '110'.{normal}\n")
+        for i, st in enumerate(struc):
+            try:
+                slab = surf_fonc(metal, size=(1, 1, 3),
+                                 a=celpar, orthogonal=True)
+            except ValueError:
+                slab = surf_fonc(metal, size=(1, 2, 3),
+                                 a=celpar, orthogonal=True)
+            slaba, slabb = slab.cell.cellpar()[:2]
+            slab = make_supercell(
+                slab, [[np.round(size/slaba), 0, 0],
+                       [0, np.round(size/slabb), 0],
+                       [0, 0, 1]])
+            slaba, slabb = slab.cell.cellpar()[:2]
+            stc = st.cell.cellpar()[2]
+            slab_max_z = np.max(slab.positions[:, 2])
+            st.positions[:, 2] += slab_max_z + \
+                2.45 - np.min(st.positions[:, 2])
+            # center st in x and y with respect to COM of st
+            st_com = np.mean(st.positions[:, 0:2], axis=0)
+            slab_com = np.mean(slab.positions[:, 0:2], axis=0)
+            slab.positions[:, 0:2] -= slab_com
+            st.positions[:, 0:2] -= st_com
+            combined = st + slab
+            combined = sort(combined, tags=combined.get_masses())
+            combined.set_cell([[slaba, 0, 0],
+                               [0, slabb, 0],
+                               [0, 0, stc]])
+            combined.positions[:, 0] += slaba/2
+            combined.positions[:, 1] += slabb/2
+            struc[i] = combined
+    if args.rotate[2] != 0:
+        if args.rotate[1] not in ['x', 'y', 'z']:
+            raise ValueError(
+                f"\n{bold}{orange}Unknown rotation axis: {args.rotate[1]}. Must be one of: 'x', 'y' or 'z'.{normal}\n")
+        for i, st in enumerate(struc):
+            # Calculate the COM of the entire structure
+            total_COM = st.get_center_of_mass()
+
+            # Select B atoms to rotate
+            mask = st.symbols.search(args.rotate[0])
+            b_atoms = st[mask].copy()
+
+            # Rotate B atoms around the total COM
+            b_atoms.rotate(
+                float(args.rotate[2]), args.rotate[1], center=total_COM, rotate_cell=False)
+
+            # Update the positions of B atoms in the original structure
+            st.positions[mask] = b_atoms.positions
+
+            # No need to recombine; the original structure is updated in place
+            struc[i] = st
+    if rattle[1] > 0:
+        sys.stderr.write(
+            f"Rattling structures with amplitude {rattle[0]} Å, generating {int(rattle[1])} structures per input structure...\n")
+        rattled_struc = []
+        rattled_comments = []
+        for i, st in tqdm(enumerate(struc), desc="Rattling structures", file=sys.stderr):
+            for j in range(int(rattle[1])):
+                rattled = st.copy()
+                rattled.rattle(stdev=rattle[0], seed=np.random.randint(0, 1e6))
+                rattled_struc.append(rattled)
+                rattled_comments.append(f"{comments[i]}_rattled{j}")
+        struc = rattled_struc
+        comments = rattled_comments
+        sys.stderr.write(
+            f"{bold}{orange}-> Total of {len(struc)} structures after rattling.{normal}\n\n")
+
+    if replicate != [1, 1, 1]:
+        sys.stderr.write(
+            f"Replicating structures by {replicate[0]} in x, {replicate[1]} in y and {replicate[2]} in z...\n")
+        replicated_struc = []
+        replicated_comments = []
+        for i, st in tqdm(enumerate(struc), desc="Replicating structures", file=sys.stderr):
+            replicated = st.copy()
+            replicated = replicated.repeat(replicate)
+            replicated_struc.append(replicated)
+            replicated_comments.append(f"{comments[i]}_replicated{replicate}")
+        struc = replicated_struc
+        comments = replicated_comments
+        # sort atoms by increasing mass
+        sorted_struc = []
+        for st in tqdm(struc, desc="Sorting atoms by mass", file=sys.stderr):
+            # Sort the atoms
+            sorted_st = st.copy()
+            sorted_st = sort(sorted_st, tags=sorted_st.get_masses())
+            # Copy the calculator and results
+            if st.calc is not None:
+                order = np.argsort(st.get_masses())
+                # Get forces and energy from the original atoms
+                forces = st.get_forces()
+                energy = st.get_potential_energy()
+                # Reorder forces to match the sorted atoms
+                forces = forces[order]
+                # Create a new calculator for the sorted atoms
+                sorted_st.calc = SinglePointCalculator(
+                    atoms=sorted_st,
+                    forces=forces,
+                    energy=energy
+                )
+            sorted_struc.append(sorted_st)
+        struc = sorted_struc
+
     # Write output
-    if out=='vasp':
-        if len(struc)==1:
-            write(sys.stdout, images = struc[0], format = "vasp", vasp5  = True)
-        if len(struc)>1:
-            for i,st in enumerate(struc):
-                write(f"POSCAR{suffix}_{i:06d}", images = st, 
-                      format = "vasp", vasp5  = True)
-    elif out=='lammps':
-        if len(struc)==1:
-            vel = None
-            if np.sum(struc[0].get_velocities())!=0:
-                vel = struc[0].get_velocities()
-            write_lammps(name = None, atoms = struc[0], 
-                        comments = input, atom_style = 'atomic', 
-                        velocities = vel)
-        if len(struc)>1:
-            for i,st in enumerate(struc):
+    if not info:
+        if out.lower() == 'vasp':
+            if len(struc) == 1:
+                write(sys.stdout, images=struc[0], format="vasp", vasp5=True)
+            if len(struc) > 1:
+                for i, st in enumerate(struc):
+                    write(f"POSCAR{suffix}_{i:06d}", images=st,
+                          format="vasp", vasp5=True)
+        elif out.lower() == 'lammps':
+            if len(struc) == 1:
                 vel = None
-                if np.sum(struc[i].get_velocities())!=0:
-                    vel = struc[i].get_velocities()
-                write_lammps(name = f"structure{suffix}_{i:06d}.data", 
-                             atoms = st, comments=f"{input}_{i}", atom_style = 'atomic',
-                             velocities = vel)
-    elif out=='lammpstrj':
-        write_lammps_traj(struc)
-    elif out=='xyz':
-        write_xyz(sys.stdout, images = struc)
-    elif out=='n2p2':
-        write_inputdata(struc, [f"{input}_{i}" for i in range(len(struc))], rmFE)
+                if np.sum(struc[0].get_velocities()) != 0:
+                    vel = struc[0].get_velocities()
+                write_lammps(name=None, atoms=struc[0],
+                             comments=input, atom_style='atomic',
+                             velocities=vel)
+            if len(struc) > 1:
+                for i, st in enumerate(struc):
+                    vel = None
+                    if np.sum(struc[i].get_velocities()) != 0:
+                        vel = struc[i].get_velocities()
+                    write_lammps(name=f"{suffix}_{i:06d}.data",
+                                 atoms=st, comments=f"{input}_{i}", atom_style='atomic',
+                                 velocities=vel)
+        elif out.lower() == 'lammpstrj':
+            if not args.split:
+                write_lammps_traj(struc)
+            else:
+                os.makedirs(f"{input[0]}_files", exist_ok=True)
+                for i, st in enumerate(struc):
+                    write_lammps_traj(
+                        [st], outfile=f"{input[0]}_files/{suffix}_{i:06d}.lammpstrj")
+        elif out.lower() == 'xyz':
+            write_xyz(sys.stdout, images=struc)
+        elif out.lower() == 'n2p2':
+            if comments is None:
+                comments = [f"{input}_{i}" for i in range(len(struc))]
+            write_inputdata(struc, comments, rmFE)
+        elif out.lower() == 'ace':
+            if comments is None:
+                comments = [f"{input}_{i}" for i in range(len(struc))]
+            strucbackup = [pickle.loads(pickle.dumps(st)) for st in struc]
+            save_pckl_gzip(struc, comments, f"dataset.pckl.gzip")
+            struc = strucbackup
+            sys.stderr.write(
+                f"""\n{bold}{orange}ACE dataset saved in 'dataset.pckl.gzip'.{normal}\n\n""")
+        elif out.lower() == 'mace':
+            if comments is None:
+                comments = [f"{input}_{i}" for i in range(len(struc))]
+            strucbackup = [pickle.loads(pickle.dumps(st)) for st in struc]
+            write_MACExyz(struc, comments, f"dataset.xyz")
+            struc = strucbackup
+            sys.stderr.write(
+                f"""\n{bold}{orange}MACE dataset saved in 'dataset.xyz'.{normal}\n\n""")
+        else:
+            raise ValueError(
+                f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', 'n2p2', 'ACE' or 'MACE'.{normal}\n")
+
+    if structype == 'OUTCAR' or structype == 'n2p2' or structype == 'ACEpckl' or structype == 'MACExyz':
+        printcell = pd.DataFrame({'Natoms': [len(st) for st in struc],
+                                  'Compo.': [st.symbols.__str__() for st in struc],
+                                  'a [Å]': [st.cell.cellpar()[0] for st in struc],
+                                  'b [Å]': [st.cell.cellpar()[1] for st in struc],
+                                  'c [Å]': [st.cell.cellpar()[2] for st in struc],
+                                  'E [eV]': [st.get_potential_energy() if st.calc is not None else 'NA' for st in struc],
+                                  'E [eV/atom]': [st.get_potential_energy()/len(st) if st.calc is not None else 'NA' for st in struc],
+                                  'Comment': [comments[i] for i in range(len(struc))]
+                                  })
     else:
-        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.{normal}\n")
-    
-    if structype=='OUTCAR' or structype=='n2p2':
-        printcell = pd.DataFrame({'Natoms':[len(st) for st in struc],
-                                'Composition':[st.symbols.__str__() for st in struc],
-                                'a [Å]':[st.cell.cellpar()[0] for st in struc], 
-                                'b [Å]':[st.cell.cellpar()[1] for st in struc], 
-                                'c [Å]':[st.cell.cellpar()[2] for st in struc],
-                                'Energy [eV]':[st.get_potential_energy() for st in struc],
-                                'Energy [eV/atom]':[st.get_potential_energy()/len(st) for st in struc]})
+        printcell = pd.DataFrame({'Natoms': [len(st) for st in struc],
+                                  'Compo.': [st.symbols.__str__() for st in struc],
+                                  'a [Å]': [st.cell.cellpar()[0] for st in struc],
+                                  'b [Å]': [st.cell.cellpar()[1] for st in struc],
+                                  'c [Å]': [st.cell.cellpar()[2] for st in struc],
+                                  'Comment': [comments[i] for i in range(len(struc))]
+                                  })
+
+    if len(printcell) > 6:
+        first_three = printcell.iloc[:3].reset_index(drop=False).copy()
+        last_three = printcell.iloc[-3:].reset_index(drop=False).copy()
+
+        # Rename the index column to something meaningful (e.g., 'index')
+        first_three = first_three.rename(columns={'index': ''})
+        last_three = last_three.rename(columns={'index': ''})
+
+        float_cols = first_three.select_dtypes(include=['float']).columns
+        first_three[float_cols] = first_three[float_cols].round(3)
+        last_three[float_cols] = last_three[float_cols].round(3)
+
+        # Create a DataFrame with an ellipsis row
+        ellipsis_row = first_three.iloc[:1].copy()
+        for col in ellipsis_row.columns:
+            ellipsis_row[col] = '...'
+
+        # Combine the first 3, ellipsis, and last 3 rows using pd.concat
+        combined = pd.concat(
+            [first_three, ellipsis_row, last_three], ignore_index=True)
     else:
-        printcell = pd.DataFrame({'Natoms':[len(st) for st in struc],
-                                'Composition':[st.symbols.__str__() for st in struc],
-                                'a [Å]':[st.cell.cellpar()[0] for st in struc], 
-                                'b [Å]':[st.cell.cellpar()[1] for st in struc], 
-                                'c [Å]':[st.cell.cellpar()[2] for st in struc]
-                                })
+        combined = printcell
+
+    # Print the combined DataFrame
     sys.stderr.write(f"""\n{bold}{orange}Structure parameters:{normal}
 
-{printcell.__str__()}
+{tabulate(combined, headers='keys', tablefmt='github', showindex=False, numalign='center', stralign='center')}
 
 """)
 
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
+
+    def _fill_text(self, text, width, indent):
+        # Override to ensure description is also formatted
+        return '\n'.join(self._split_lines(text, width))
 
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def add_argument(self, *args, help=None, default=None, **kwargs):
-        if help is not None:
-            kwargs['help'] = help
-        if default is not None and args[0] != '-h':
-            kwargs['default'] = default
-            if help is not None:
-                kwargs['help'] += f'\n{bold}{orange}Default: {normal}{orange}{format(default)}{normal}'
-        super().add_argument(*args, **kwargs)
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
 
 
 def get_parser():
     """ The argument parser of the command-line version """
-    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
-    description=f"""{bold}{orange}Convert files to other format in stdout
-Name must contain either:
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
+                                        description=f"""{bold}{orange}Convert files to other format in stdout. The input file name must contain either:  
 - 'POSCAR' or 'OUTCAR' for vasp files
 - '.data' or '.inp' for NNP input files
 - '.lammpstrj' for lammps trajectory files
 - '.xyz' for xyz trajectory files
+- '.xyz' for MACE datasets
+- '.pckl.gzip' for ACE datasets
+- '.pckl' for ACE datasets  
 {normal}
 """)
     parser.add_argument('--input', '-in',
-                        help    = 'Input file name.')
+                        nargs='*',
+                        type=str,
+                        help='Input file name.')
     parser.add_argument('--slice', '-s',
-                        type    = str,
-                        help    = '''Python slice to select images. Use:
+                        type=str,
+                        help='''Python slice to select images. Use:
 - ':' to select all images
 - '0::2' to select even images
 - '1::2' to select odd images
 - '-1' to select the last image''',
-                        default = "-1")
+                        default="-1")
     parser.add_argument('--out', '-out',
-                        help    = """Output file format. Must be one of:  
-'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.""",
-                        type    = str,
-                        default = 'lammps')
+                        help="""Output file format. Must be one of:  
+'vasp', 'xyz', 'lammps', 'lammpstrj', 'n2p2', 'ACE' or 'MACE'.""",
+                        type=str,
+                        default='lammps')
     parser.add_argument('--rmFE', '-rmFE',
-                        help    = "For n2p2 output. Set Forces and Energies to 0.",
-                        default = False, 
-                        action  = "store_true")
+                        help="For n2p2 output. Set Forces and Energies to 0.",
+                        default=False,
+                        action="store_true")
     parser.add_argument('--fixed', '-f',
-                        help    = """Fixed number of substrate layers, starting from the bottom.  
+                        help="""Fixed number of substrate layers, starting from the bottom.  
 Only for 'vasp' output.""",
-                        type    = int,
-                        default = None)
+                        type=int,
+                        default=None)
     parser.add_argument('--rmSub', '-rmSub',
-                        help    = "If provided, remove `rmSub` layers of substrate, starting from the bottom.",
-                        type    = int,
-                        default = None)
+                        help="If provided, remove `rmSub` layers of substrate, starting from the bottom.",
+                        type=int,
+                        default=None)
     parser.add_argument('--compVel', '-cv',
-                        help    = "Compute velocities from the positions of the atoms at the two first frames.",
-                        default = False, 
-                        action  = "store_true")
+                        help="Compute velocities from the positions of the atoms at the two first frames.",
+                        default=False,
+                        action="store_true")
     parser.add_argument('--dt', '-dt',
-                        help    = "Time step between the two first frames for computing the velocities.",
-                        type    = float,
-                        default = 1.0)
+                        help="Time step between the two first frames for computing the velocities.",
+                        type=float,
+                        default=1.0)
     parser.add_argument('--suffix', '-suf',
-                        help    = "Suffix to add to the output file names.",
-                        type    = str,
-                        default = '')
+                        help="Suffix to add to the output file names.",
+                        type=str,
+                        default='')
+    parser.add_argument('--filterEF', '-fEF',
+                        help="If set, filter out structures with Energy > filterEF[0] or Forces > filterEF[1]. Provide two values: first for Energy threshold (eV/atom), second for Forces threshold (eV/Å).",
+                        nargs=2,
+                        default=[None, None])
+    parser.add_argument('--add_sub', '-as',
+                        help="Add 3 layers of metal surface to the structure, with given orientation and lateral size. The metal M must be specified in first argument, the orientation in second, and the lateral size in third.",
+                        nargs=3,
+                        default=['Ag', '111', 0])
+    parser.add_argument('--rattle', '-rat',
+                        help="Rattle the atoms positions with a given standard deviation (in Å). The first argument is the standard deviation, the second for the number of structures to generate. Accounts for constraints if present.",
+                        nargs=2,
+                        type=float,
+                        default=[0.05, 0])
+    parser.add_argument('--rotate', '-rot',
+                        help="Rotate the structure around the center of mass. The first argument is the atom type, the second is the axis of rotation (x, y or z), and the third is the angle in degrees.",
+                        nargs=3,
+                        default=['B', 'z', 0])
+    parser.add_argument('--split', '-spl',
+                        action='store_true',
+                        default=False,
+                        help="If set, split the output into multiple files. Only for lammpstrj output.")
+    parser.add_argument('--wrap', '-w',
+                        action='store_true',
+                        default=False,
+                        help="If set, make sure all atoms are inside the cell by wrapping them and checking no atoms went through the lower limit and appeared at the top one.")
+    parser.add_argument('--info', '-i',
+                        action='store_true',
+                        default=False,
+                        help="If set, just print file information but do not write output files.")
+    parser.add_argument('--replicate', '-rep',
+                        help="Replicate the structure in x, y and z directions. Provide three integers as arguments for the number of replications in each direction.",
+                        nargs=3,
+                        type=int,
+                        default=[1, 1, 1])
     parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
     return parser
 
@@ -186,6 +496,3 @@ if __name__ == "__main__":
     parser = get_parser()       # Start the command-line argument parsing
     args = parser.parse_args()  # Read the command-line arguments
     main(args)                  # run the command-line version
-
-
-

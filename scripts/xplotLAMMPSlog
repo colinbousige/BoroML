@@ -14,6 +14,8 @@ import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd 
+from glob import glob
+import textwrap
 
 boldorange = "\033[93m\033[1m"
 orange = "\033[93m"
@@ -21,11 +23,17 @@ normal = "\033[0m"
 
 def main(args):
     input = args.input
-    cols = args.cols
+    # cols = args.cols
     
     if not os.path.exists(input):
-        sys.stderr.write(f"\n{boldorange}ERROR:{normal} The input file '{input}' does not exist.\n\n")
-        sys.exit(1)
+        sys.stderr.write(f"\n{boldorange}ERROR:{normal} The input file '{input}' does not exist.\n")
+        input = glob("lammps*out")
+        if len(input) == 0:
+            sys.stderr.write(f"{boldorange}ERROR:{normal} Looked for 'lammps*.out' files, but none were found in the current directory.\n\n")
+            sys.exit(1)
+        else:
+            input = input[0]
+            sys.stderr.write(f"{boldorange}WARNING:{normal} Using '{input}' as the input file.\n\n")
     
     with open(input, "r") as f:
         lines = f.readlines()
@@ -37,85 +45,106 @@ def main(args):
     if len(begin)>len(end):
         end.append(len(lines))
 
-    header = lines[begin[0]+1].split()
-    with open('tmp','w') as f:
-        f.write(f"{','.join(header)},run\n")
-        for run in range(len(begin)):
+    for run in range(len(begin)):
+        header = lines[begin[run]+1].split()
+        with open(f'tmp{run}','w') as f:
+            f.write(f"{','.join(header)},run\n")
             for i in range(begin[run]+2, end[run]):
                 if "ERROR on proc" in lines[i]:
                     break
                 if "#" not in lines[i] and 'warning' not in lines[i].lower():
                     toprint = lines[i].split()
+                    if 'ERROR' in toprint:
+                        toprint=['NaN']*len(header)
                     f.write(f"{','.join(toprint)},{run+1}\n")
 
-    data = pd.read_csv('tmp')
-    os.remove('tmp')
+    data = [pd.read_csv(f'tmp{run}') for run in range(len(begin))]
+    for run in range(len(begin)):
+        os.remove(f'tmp{run}')
     if len(args.remrun)>0:
-        data = data[~data['run'].isin(args.remrun)]
+        data = [data[run] for run in range(len(data)) if (run+1) not in args.remrun]
     
-    if cols is None:
-        cols = data.columns[1:]
-        print(f"Available columns: {boldorange}{' '.join(cols.tolist())}{normal}\n")
+    # if cols is None:
+    #     print("Available columns:")
+    #     for i,d in enumerate(data):
+    #         cols = d.columns[1:]
+    #         print(f"Run {i+1}: {boldorange}{' '.join(cols.tolist())}{normal}")
     
-    nruns = len(set(data.run))
-    runs = sorted(set(data.run))
+    nruns = len(data)
+    ncols = np.max([len(d.columns)-1 for d in data])
     
-    fig, ax = plt.subplots(nrows=nruns, ncols=len(cols), 
-                           figsize=(3*len(cols),3*nruns), 
+    fig, ax = plt.subplots(nrows=nruns, ncols=ncols, 
+                           figsize=(3*ncols,3*nruns), 
                            tight_layout=True)
     if nruns > 1:
         for row in range(nruns):
-            for col in range(len(cols)):
-                mydata = data[data['run'] == runs[row]]
+            for col in range(len(data[row].columns)-1):
+                mydata = data[row]
+                run = mydata['run'].unique()
                 if col==0: 
-                    ax[row][col].set_title(f"Run {runs[row]}", fontweight="bold", loc='left')
+                    ax[row][col].set_title(f"Run {run}", fontweight="bold", loc='left')
                 ax[row][col].set_xlabel('Step')
-                ax[row][col].set_ylabel(cols[col])
+                ax[row][col].set_ylabel(mydata.columns[col+1])
                 ax[row][col].grid()
-                ax[row][col].scatter(mydata.Step, mydata[cols[col]], alpha=0.9)
-                ax[row][col].plot(mydata.Step, mydata[cols[col]], alpha=0.9)
+                ax[row][col].scatter(mydata.Step, mydata[mydata.columns[col+1]], alpha=0.9)
+                ax[row][col].plot(mydata.Step, mydata[mydata.columns[col+1]], alpha=0.9)
     else:
-        for col in range(len(cols)):
-            mydata = data[data['run'] == runs[0]]
+        for col in range(ncols):
+            mydata = data[0]
             if col==0: 
-                ax[col].set_title(f"Run {runs[0]}", fontweight="bold", loc='left')
+                ax[col].set_title(f"Run {run}", fontweight="bold", loc='left')
             ax[col].set_xlabel('Step')
-            ax[col].set_ylabel(cols[col])
+            ax[col].set_ylabel(mydata.columns[col+1])
             ax[col].grid()
-            ax[col].scatter(mydata.Step, mydata[cols[col]], alpha=0.9)
-            ax[col].plot(mydata.Step, mydata[cols[col]], alpha=0.9)
+            ax[col].scatter(mydata.Step, mydata[mydata.columns[col+1]], alpha=0.9)
+            ax[col].plot(mydata.Step, mydata[mydata.columns[col+1]], alpha=0.9)
     if args.save:
         plt.savefig(f"log.png")
         subprocess.run(f"imgcat log.png", shell=True)
     else:
+        print("Close the plot window to continue...\n")
         plt.show()
 
 
 
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
+
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def add_argument(self, *args, help=None, default=None, **kwargs):
-        if help is not None:
-            kwargs['help'] = help
-        if default is not None and args[0] != '-h':
-            kwargs['default'] = default
-            if help is not None:
-                kwargs['help'] += f'\n{boldorange}Default: {normal}{orange}{format(default)}{normal}'
-        super().add_argument(*args, **kwargs)
-
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
 
 def get_parser():
     """ The argument parser of the command-line version """
-    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
     description=f"""
 {boldorange}Read log.lammps file to retrieve thermo data in a friendly csv format in stdout.{normal}
 """)
     parser.add_argument('--input', '-in',
                         help    = 'Input file name to read.',
                         default = "lammps.out")
-    parser.add_argument('--cols', '-c',
-                        nargs   = '*',
-                        help    = 'Columns to plot as a function of `Step`.',
-                        default = None)
+    # parser.add_argument('--cols', '-c',
+    #                     nargs   = '*',
+    #                     help    = 'Columns to plot as a function of `Step`.',
+    #                     default = None)
     parser.add_argument('--remrun', '-rr',
                         nargs   = '*',
                         type    = int,

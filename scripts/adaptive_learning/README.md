@@ -1,69 +1,161 @@
-# Adaptive Learning
+# HPC Active Learning Workflow
 
-List of different functions to be called in an adaptive learning script to build the dataset for an NNP.
+This folder contains the bash/python workflow used to run active learning on HPC systems with:
 
-- Author: [Colin BOUSIGE](mailto:colin.bousige@cnrs.fr)
-- Affiliation: CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
-- Date: 2024/11/12
+- n2p2 for scaling/training/prediction
+- LAMMPS for MD tests
+- VASP for DFT labeling of selected structures
 
-## Usage
+The main entry point is `goal.sh`, which dispatches the workflow stages.
 
-First, add this folder (`$HOME/Boro_ML/bin/adaptive_learning` or wherever you put it) to your `$PATH` and `$PYTHONPATH`.
+## 1) What you need before starting
 
-Then, go to your working directory, and make sure the following files are there:
+Make sure scripts in this folder are executable and available by adding it to your `PATH`.
 
-- Necessary:
-  - `stock.data`: `input.data` file with all stock structures
-  - `initial_input.data.`: initial `input.data` structures dataset
-  - `input1.nn`: `input.nn` for NNP1
-  - `input2.nn`: `input.nn` for NNP2
-- Optional:
-  - `EW.data`: `input.data` file with only EW structures. They will be computed with VASP and added to the dataset at the beginning of the procedure. This file is created with the script `xLAMMPStoNNP`.
-  - `input3.nn`: `input.nn` for NNP3
-  - etc
+Then, run all commands from your working directory, where you need the following files:
 
-Then do:
+- Input/control files:
+  - `input_AL`
+  - `<STEP>_input.data` (example: `0_input.data`)
+  - `<STEP>_STOCK.data` (example: `0_STOCK.data`)
+  - `input1.nn`, `input2.nn`, ... `inputN.nn`
+- Environment templates:
+  - `job.env`
+  - `python.env`
+  - `n2p2.env`
+  - `lammps.env`
+  - `vasp.env`
+- VASP files:
+  - `INCAR`, `POTCAR`, `KPOINTS`
+- LAMMPS files referenced by `input_AL`:
+  - one LAMMPS input script (`LAMMPS_INPUT`)
+  - one or more structure/data files (`LAMMPS_DAT_FILES`)
+
+Template files are centralized in `templates/`:
+
+- `templates/input_AL`
+- `templates/input.lmp`
+- `templates/job.env`
+- `templates/python.env`
+- `templates/n2p2.env`
+- `templates/lammps.env`
+- `templates/vasp.env`
+
+Recommended: create a run directory from templates with the helper script:
 
 ```bash
-xjobadaptive node26
+scripts/adaptive_learning/init_run_dir.sh <your-run-directory>
 ```
 
-It will copy the python script `$HOME/Boro_ML/bin/adaptive_learning/adaptive_training.py` in the current directory, and launch the script on `node26`.
-
-Alternatively, you can copy the script manually:
+Use `--force` to overwrite existing files in the run directory:
 
 ```bash
-cp <path>/adaptive_learning/jobadaptive .
+scripts/adaptive_learning/init_run_dir.sh <your-run-directory> --force
 ```
 
-Then edit `jobadaptive` to your needs and launch it with `sbatch jobadaptive`.
+Manual alternative:
 
-## Note
+Copy templates into your run directory, then adapt to your cluster settings before launching jobs:
 
-`stock.data` is a file containing all the structures that will be used in the adaptive learning procedure. It is usually created with the script `xLAMMPStoNNP` that gathers all structures in a LAMMPS trajectory into an n2p2-type `stock.data` file. If created by this script, all energies and forces are set to 0 since they are not known at the DFT level.
+```bash
+cp /path/to/BoroML/scripts/adaptive_learning/templates/* .
+```
 
-In case you have already computed some structures with DFT, you can still include them in the `stock.data` file. In this case, all structures that have non zero energies will be extracted to individual `vasp/OUTCAR_i.inp` files. This way, they will be detected as already computed and not be computed again during the adaptive learning procedure.
+If you are running from the repository root:
 
-## Adapting to your own needs
+```bash
+cp scripts/adaptive_learning/templates/* <your-run-directory>/
+```
 
-- You must have access to the `potpaw_pbe` folder of VASP to use this script. The path to the folder containing `potpaw_pbe` is set in the `jobadaptive` script created by running `xjobadaptive`. It is set by default to `$HOME/bin/vasp`, you need to change it if it not there.
-- `environments.py` is a file containing the environment variables for the cluster. You need to adapt it to your own cluster and where you have installed `n2p2`, `gsl`, `openmpi`, and `vasp`.
-- `SlurmJob` is a class to run and manage `n2p2` and `VASP` jobs on `lynx`, the iLM cluster. You need to adapt it to your own cluster if your cluster is not using SLURM or if you don't need to specify the queue when submitting a job on your cluster.
+## 2) Quick start for one AL step
 
-## List of available classes
+Assume you are starting at step `0`.
 
-- `SlurmJob`
-  - A class to run and manage `n2p2` and `VASP` jobs on `lynx`
-- `Cluster`
-  - A class to access cluster state
-- `AdaptiveTraining`
-  - A class to perform an Adaptive Training
+1. Initialize the AL step:
 
-## List of available functions
+```bash
+./goal.sh init 0
+```
 
-- `read_inputdata(filename: str, copy_data=None)`
-  - Read `input.data` file and return a list of Atoms objects and the comments. If `copy_data` is a path, it will copy the corresponding inp file to `copy_data/OUTCAR_i.inp` for all structures with non-zero energy and indices i.
-- `write_inputdata(filename: str, atoms, comments)`
-  - From a list of Atoms object and comments, write an `input.data` file to `filename`.
-- `print_success_message()`
-  - Print a geeky success message.
+This creates and configures:
+
+- stock chunks (`stock1.data`, `stock2.data`, ...) to avoid memory issues with large stock files
+- run directories (`0_NNP*`, `0_vasp*`, plots, logs)
+- master AL job script: `0_job_al`
+
+1. Submit the master AL job:
+
+```bash
+sbatch 0_job_al
+```
+
+1. Follow progress:
+
+```bash
+tail -f 0_status.log
+```
+
+## 3) Other common commands
+
+The dispatcher is:
+
+```bash
+./goal.sh <command> [args]
+```
+
+Main commands:
+
+- `init <step>`
+  - Prepare one AL step and generate `<step>_job_al`.
+- `train <step> <input.data> <YES|NO>`
+  - Prepare `<step>_TRAIN` and optional standalone training submission.
+- `xMDs <step> <epoch> <YES|NO>`
+  - Build and optionally submit MD-test jobs from trained weights.
+- `get_EWnb <step>`
+  - Count extrapolation warnings from MD tests.
+- `EW_DFT <step> <YES|NO>`
+  - Build and optionally submit VASP jobs for selected EW structures.
+- `rnw_dataset <step> <old_input.data>`
+  - Create `<step+1>_input.data` by appending newly DFT-labeled structures.
+- `rnw_stck <step> <YES|NO>`
+  - Build jobs to regenerate stock candidates from dumps/randomized structures.
+- `crt_stck <step>`
+  - Create `<step+1>_STOCK.data` from renewed stock fragments.
+
+## 4) Suggested multi-step cycle
+
+Typical loop:
+
+1. `./goal.sh init <k>`
+2. `sbatch <k>_job_al`
+3. optional dedicated final training: `./goal.sh train <k> <k>_input.data YES`
+4. MD tests: `./goal.sh xMDs <k> <epoch> YES`
+5. EW DFT: `./goal.sh EW_DFT <k> YES`
+6. dataset update: `./goal.sh rnw_dataset <k> <k>_input.data`
+7. stock update: `./goal.sh rnw_stck <k> YES` then `./goal.sh crt_stck <k>`
+8. next step: `./goal.sh init <k+1>`
+
+## 5) Important placeholders in env templates
+
+The scripts expect these placeholders in `job.env`:
+
+- `NNODES` (replaced by target node count)
+- `jobname` (replaced by stage-specific name)
+
+If either placeholder is missing, generated job scripts may be invalid.
+
+## 6) Troubleshooting
+
+- Error: missing `python.env`, `job.env`, `n2p2.env`, `lammps.env`, or `vasp.env`
+  - Create the missing file in the run directory and retry.
+- Error: missing `input_AL` keys
+  - Check spelling and capitalization of parameter names.
+- Error: `<step>_TRAIN` or `MDs_*` directory not found
+  - Run earlier pipeline stages first (`train` before `xMDs`, `xMDs` before `EW_DFT`, etc.).
+- Empty converted OUTCAR data
+  - Very high-force structures are filtered in update scripts; this is expected for unstable configurations.
+
+## Authors
+
+- Initial Python version: [Colin Bousige](mailto:colin.bousige@cnrs.fr), Laboratoire des Multimatériaux et Interfaces, Lyon, France
+- Conversion to shell scripts and adaptation to generic HPC workflow: [Pierre Mignon](mailto:pierre.mignon@univ-lyon1.fr), Institut Lumière Matière, Lyon, France

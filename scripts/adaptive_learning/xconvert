@@ -1,0 +1,209 @@
+#!/softs/anaconda3/bin/python3
+
+"""
+Convert files to other format in stdout
+Name must contain either:
+- 'POSCAR', 'CONTCAR' or 'OUTCAR' for vasp files
+- '.data' or '.inp' for NNP input files
+- '.lammpstrj' for lammps trajectory files
+- '.xyz' for xyz trajectory files
+
+Copyright (c) 2025 Colin Bousige 
+Licensed under the MIT License
+"""
+
+import argparse
+import numpy as np
+import pandas as pd
+import sys
+from ase.io import write
+from ase.build.tools import sort
+from ase.constraints import FixAtoms
+from read_write import *
+import textwrap
+
+orange = "\033[93m"
+bold   = "\033[1m"
+normal = "\033[0m"
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+def main(args):
+    input   = args.input
+    out     = args.out
+    slice   = args.slice
+    fixed   = args.fixed
+    rmSub   = args.rmSub
+    rmFE    = args.rmFE
+    compVel = args.compVel
+    dt      = args.dt
+    suffix  = args.suffix
+
+    if input is None:
+        sys.stderr.write(f"\n{bold}{orange}Input file name is missing.{normal}\n\n")
+        sys.exit(1)
+    struc, structype = read(filename = input, slice = slice, cv = compVel, dt = dt)
+    
+    # Remove substrate layers if needed
+    if rmSub is not None:
+        for i,st in enumerate(struc):
+            zpos = sorted(set(st.positions[:,2]))
+            del st[[ atom.index for atom in st if atom.symbol != 'B' and atom.position[2] <= zpos[rmSub-1]+.1 ]]
+            struc[i] = st
+    # Fix substrate layers if needed
+    if fixed is not None:
+        for i,st in enumerate(struc):
+            zpos = sorted(set(st.positions[:,2]))
+            mask = [i for i,at in enumerate(st.get_chemical_symbols()) if 
+                    at != 'B' and st.positions[i,2] <= zpos[fixed-1]+.1]
+            c = FixAtoms(mask = mask)
+            st.set_constraint(c)
+            st = sort(st, tags = st.get_masses())
+            struc[i] = st
+    # Write output
+    if out=='vasp':
+        # sort atoms by increasing mass
+        struc = [sort(st, tags = st.get_masses()) for st in struc]
+        if len(struc)==1:
+            write(sys.stdout, images = struc[0], format = "vasp", vasp5  = True)
+        if len(struc)>1:
+            for i,st in enumerate(struc):
+                write(f"POSCAR{suffix}_{i:06d}", images = st, 
+                      format = "vasp", vasp5  = True)
+    elif out=='lammps':
+        if len(struc)==1:
+            vel = None
+            if np.sum(struc[0].get_velocities())!=0:
+                vel = struc[0].get_velocities()
+            write_lammps(name = None, atoms = struc[0], 
+                        comments = input, atom_style = 'atomic', 
+                        velocities = vel)
+        if len(struc)>1:
+            for i,st in enumerate(struc):
+                vel = None
+                if np.sum(struc[i].get_velocities())!=0:
+                    vel = struc[i].get_velocities()
+                write_lammps(name = f"structure{suffix}_{i:06d}.data", 
+                             atoms = st, comments=f"{input}_{i}", atom_style = 'atomic',
+                             velocities = vel)
+    elif out=='lammpstrj':
+        write_lammps_traj(struc)
+    elif out=='xyz':
+        write_xyz(sys.stdout, images = struc)
+    elif out=='n2p2':
+        write_inputdata(struc, [f"{input}_{i}" for i in range(len(struc))], rmFE)
+    else:
+        raise ValueError(f"\n{bold}{orange}Unknown output format: {out}. Must be one of: 'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.{normal}\n")
+    
+    if structype=='OUTCAR' or structype=='n2p2':
+        printcell = pd.DataFrame({'Natoms':[len(st) for st in struc],
+                                'Composition':[st.symbols.__str__() for st in struc],
+                                'a [Å]':[st.cell.cellpar()[0] for st in struc], 
+                                'b [Å]':[st.cell.cellpar()[1] for st in struc], 
+                                'c [Å]':[st.cell.cellpar()[2] for st in struc],
+                                'Energy [eV]':[st.get_potential_energy() for st in struc],
+                                'Energy [eV/atom]':[st.get_potential_energy()/len(st) for st in struc]})
+    else:
+        printcell = pd.DataFrame({'Natoms':[len(st) for st in struc],
+                                'Composition':[st.symbols.__str__() for st in struc],
+                                'a [Å]':[st.cell.cellpar()[0] for st in struc], 
+                                'b [Å]':[st.cell.cellpar()[1] for st in struc], 
+                                'c [Å]':[st.cell.cellpar()[2] for st in struc]
+                                })
+    sys.stderr.write(f"""\n{bold}{orange}Structure parameters:{normal}
+
+{printcell.__str__()}
+
+""")
+
+
+
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
+
+class ArgumentParserWithDefaults(argparse.ArgumentParser):
+    def add_argument(self, *args, help=None, default=None, **kwargs):
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
+
+def get_parser():
+    """ The argument parser of the command-line version """
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
+    description=f"""{bold}{orange}Convert files to other format in stdout
+Name must contain either:
+- 'POSCAR' or 'OUTCAR' for vasp files
+- '.data' or '.inp' for NNP input files
+- '.lammpstrj' for lammps trajectory files
+- '.xyz' for xyz trajectory files
+{normal}
+""")
+    parser.add_argument('--input', '-in',
+                        help    = 'Input file name.')
+    parser.add_argument('--slice', '-s',
+                        type    = str,
+                        help    = '''Python slice to select images. Use:
+- ':' to select all images
+- '0::2' to select even images
+- '1::2' to select odd images
+- '-1' to select the last image''',
+                        default = "-1")
+    parser.add_argument('--out', '-out',
+                        help    = """Output file format. Must be one of:  
+'vasp', 'xyz', 'lammps', 'lammpstrj', or 'n2p2'.""",
+                        type    = str,
+                        default = 'lammps')
+    parser.add_argument('--rmFE', '-rmFE',
+                        help    = "For n2p2 output. Set Forces and Energies to 0.",
+                        default = False, 
+                        action  = "store_true")
+    parser.add_argument('--fixed', '-f',
+                        help    = """Fixed number of substrate layers, starting from the bottom.  
+Only for 'vasp' output.""",
+                        type    = int,
+                        default = None)
+    parser.add_argument('--rmSub', '-rmSub',
+                        help    = "If provided, remove `rmSub` layers of substrate, starting from the bottom.",
+                        type    = int,
+                        default = None)
+    parser.add_argument('--compVel', '-cv',
+                        help    = "Compute velocities from the positions of the atoms at the two first frames.",
+                        default = False, 
+                        action  = "store_true")
+    parser.add_argument('--dt', '-dt',
+                        help    = "Time step between the two first frames for computing the velocities.",
+                        type    = float,
+                        default = 1.0)
+    parser.add_argument('--suffix', '-suf',
+                        help    = "Suffix to add to the output file names.",
+                        type    = str,
+                        default = '')
+    parser.usage = f'\033[93m{parser.format_usage()[7:]}\033[0m'
+    return parser
+
+
+if __name__ == "__main__":
+    """ Run as a stand-alone script """
+    parser = get_parser()       # Start the command-line argument parsing
+    args = parser.parse_args()  # Read the command-line arguments
+    main(args)                  # run the command-line version
+
+
+

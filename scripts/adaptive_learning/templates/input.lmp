@@ -1,0 +1,49 @@
+# Template LAMMPS input used by scripts/adaptive_learning/doMDtests.sh.
+# Placeholders replaced automatically:
+# - T0TEMP
+# - T1TEMP
+# - MEW
+# - suffix
+# - LAMMPSINPUTDAT
+# Optional box scaling lines are uncommented by the workflow when needed.
+
+# Parameters
+variable inputfile   string LAMMPSINPUTDAT
+variable T0          equal T0TEMP
+variable T1          equal T1TEMP
+variable maxEW       equal MEW
+variable run_suffix  string suffix
+
+# Initialize
+units      metal
+boundary   p p p
+atom_style atomic
+
+# Input structure
+read_data  ${inputfile}
+
+# These lines are enabled by doMDtests.sh when box variations are requested.
+#change_box     all x scale xxx remap
+#change_box     all y scale yyy remap
+#change_box     all z scale zzz remap
+
+# N2P2 potential (expects input.nn, scaling.data, and weights*.data in cwd)
+pair_style hdnnp 6.36 dir . showew yes showewsum 100 maxew ${maxEW} cflength 1.8897261328 cfenergy 0.0367493254
+pair_coeff * * B Ag
+
+# Output
+thermo_style  custom step temp ke pe etotal press lx ly lz
+thermo        200
+
+# MD run
+velocity      all create ${T0} 123456
+fix           md all nvt temp ${T0} ${T1} 0.1
+
+dump          dmp all custom 100 dump_${run_suffix}.lammpstrj id type x y z fx fy fz
+dump_modify   dmp sort id
+
+run           10000
+
+unfix         md
+undump        dmp
+print         "Job done."

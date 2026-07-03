@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3
 
 """
-Plot DeepMD or n2p2 learning curve
+Plot DeepMD, n2p2, ACE or MACE learning curve
 
 Copyright (c) 2025 Colin Bousige
 Licensed under the MIT License
@@ -13,6 +13,9 @@ import numpy as np
 import os
 import argparse
 import subprocess
+import textwrap
+from glob import glob
+import json
 
 orange = "\033[93m"
 bold   = "\033[1m"
@@ -21,7 +24,29 @@ normal = "\033[0m"
 defaultinput = "./lcurve.out"
 if not os.path.exists(defaultinput):
     defaultinput = "./learning-curve.out"
+if not os.path.exists(defaultinput):
+    defaultinput = glob("metrics*txt")[0]
+if not os.path.exists(defaultinput):
+    defaultinput = glob("results/*.txt")[0]
 
+
+def read_json_lines(file_path):
+    data = []
+    with open(file_path, 'r') as file:
+        first_line = True
+        for line in file:
+            if first_line:
+                first_line = False
+                continue  # Skip the first line
+            if "mae_e" in line:
+                try:
+                    json_obj = json.loads(line)
+                    data.append(json_obj)
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON: {e}")
+    return pd.DataFrame(data)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 def main(args):
 
@@ -136,37 +161,169 @@ def main(args):
         if args.log:
             ax[1,0].set_yscale('log')
         ax[1][0].set_xlim(left=0)
+    
+    if "metrics" in args.input:
+        metrics_files = glob("metrics*.txt")
+        data_list = []
+        for mf in metrics_files:
+            df = pd.read_table(mf, comment='#', sep='\s+', engine="python")
+            df['filename'] = mf
+            data_list.append(df)
+        data = pd.concat(data_list, ignore_index=True)
+        testmetrics_files = glob("test_metrics*.txt")
+        valid_list = []
+        for tmf in testmetrics_files:
+            vdf = pd.read_table(tmf, comment='#', sep='\s+', engine="python")
+            vdf['filename'] = tmf
+            valid_list.append(vdf)
+        valid = pd.concat(valid_list, ignore_index=True)
+        
+        xmin = args.xmin
+        if args.xmax:
+            xmax = args.xmax
+        else:
+            xmax = data.shape[0]
+        
+        data = data[xmin:(xmax+1)]
+        valid = valid[xmin:(xmax+1)]
+        files = np.sort(data['filename'].unique())
+        tfiles = np.sort(valid['filename'].unique())
+        Nsteps = len(files)
+        
+        fig, ax = plt.subplots(nrows=3, ncols=Nsteps, figsize=(5*Nsteps, 10), 
+                                tight_layout=True, squeeze=False, sharex='col')
+        for lad, nf, vnf in zip(range(Nsteps), files, tfiles):
+            data_lad = data.loc[data.filename == nf]
+            data_lad = data_lad.reset_index(drop=True)
+            valid_lad = valid.loc[valid.filename == vnf]
+            valid_lad = valid_lad.reset_index(drop=True)
+            ax[0][lad].set_title(f'Loss - {nf.replace("metrics_", "").replace(".txt", "")}', fontweight="bold")
+            ax[0][lad].set_xlabel('Epoch')
+            ax[0][lad].set_ylabel('Loss')
+            ax[0][lad].grid()
+            if args.log:
+                ax[0][lad].set_yscale('log')
+                ax[0][lad].set_ylim(bottom=1e-4, top=1e1)
+            ax[0][lad].plot(data_lad['iter_num'], data_lad['loss'], label='Train', alpha=0.7, c='tab:blue')
+            ax[0][lad].plot(valid_lad['iter_num'], valid_lad['loss'], label='Validation', alpha=0.7, c='tab:orange')
+            ax[0][lad].legend(frameon=False)
 
+            ax[1][lad].set_title('Forces RMSE', fontweight="bold")
+            ax[1][lad].set_xlabel('Epoch')
+            ax[1][lad].set_ylabel('Force RMSE [meV/Å]')
+            ax[1][lad].grid()
+            if args.log:
+                ax[1][lad].set_yscale('log')
+                ax[1][lad].set_ylim(bottom=10.0, top=1e4)
+            ax[1][lad].plot(data_lad['iter_num'], data_lad['rmse_f_comp']*1000, label='Train - Total', alpha=0.7, c='tab:blue')
+            ax[1][lad].plot(data_lad['iter_num'], data_lad['low_rmse_f_comp']*1000, label='Train - Low', alpha=0.7, c='tab:blue', linestyle='--')
+            ax[1][lad].plot(valid_lad['iter_num'], valid_lad['rmse_f_comp']*1000, label='Validation - Total', alpha=0.7, c='tab:orange')
+            ax[1][lad].plot(valid_lad['iter_num'], valid_lad['low_rmse_f_comp']*1000, label='Validation - Low', alpha=0.7, c='tab:orange', linestyle='--')
+            ax[1][lad].legend(frameon=False)
 
-    plt.savefig("LC.png", dpi=300)
+            ax[2][lad].set_title('Energy RMSE', fontweight="bold")
+            ax[2][lad].set_xlabel('Epoch')
+            ax[2][lad].set_ylabel('Energy RMSE [meV/atom]')
+            ax[2][lad].grid()
+            if args.log:
+                ax[2][lad].set_yscale('log')
+                ax[2][lad].set_ylim(bottom=1, top=1e4)
+            ax[2][lad].plot(data_lad['iter_num'], data_lad['rmse_epa']*1000, label='Train - Total', alpha=0.7, c='tab:blue')
+            ax[2][lad].plot(data_lad['iter_num'], data_lad['low_rmse_epa']*1000, label='Train - Low', alpha=0.7, c='tab:blue', linestyle='--')
+            ax[2][lad].plot(valid_lad['iter_num'], valid_lad['rmse_epa']*1000, label='Validation - Total', alpha=0.7, c='tab:orange')
+            ax[2][lad].plot(valid_lad['iter_num'], valid_lad['low_rmse_epa']*1000, label='Validation - Low', alpha=0.7, c='tab:orange', linestyle='--')
+            ax[2][lad].legend(frameon=False)
+    
+    if "results/" in args.input:
+        data = read_json_lines(args.input)
+        # remove Nan values
+        data = data.dropna(subset=['rmse_e_per_atom', 'rmse_f'])
+        data = data.reset_index(drop=True)
+        xmin = args.xmin
+        if args.xmax:
+            xmax = args.xmax
+        else:
+            xmax = int(max(data.epoch))
+        data = data[xmin:(xmax+1)]
+        fig, ax = plt.subplots(nrows=3, ncols=1, figsize=(5, 10), tight_layout=True, 
+                               squeeze=False, sharex=True)
+        ax[0][0].set_title('Loss', fontweight="bold")
+        ax[0][0].set_xlabel('Epoch')
+        ax[0][0].set_ylabel('Loss')
+        ax[0][0].grid()
+        if args.log:
+            ax[0][0].set_yscale('log')
+        ax[0][0].plot(data.epoch, data['loss'])
+
+        ax[1][0].set_title('Forces RMSE and MAE', fontweight="bold")
+        ax[1][0].set_xlabel('Epoch')
+        ax[1][0].set_ylabel('Force RMSE and MAE [meV/Å]')
+        ax[1][0].grid()
+        if args.log:
+            ax[1][0].set_yscale('log')
+        ax[1][0].plot(data.epoch, data['rmse_f']*1000, label='RMSE')
+        ax[1][0].plot(data.epoch, data['mae_f']*1000, label='MAE')
+        ax[1][0].legend(frameon=False)
+        
+        ax[2][0].set_title('Energy RMSE and MAE', fontweight="bold")
+        ax[2][0].set_xlabel('Epoch')
+        ax[2][0].set_ylabel('Energy RMSE and MAE [meV/atom]')
+        ax[2][0].grid()
+        if args.log:
+            ax[2][0].set_yscale('log')
+        ax[2][0].plot(data.epoch, data['rmse_e_per_atom']*1000, label='RMSE')
+        ax[2][0].plot(data.epoch, data['mae_e_per_atom']*1000, label='MAE')
+        ax[2][0].legend(frameon=False)
+        ax[2][0].text(0.02, 0.99,f'''Best Values:
+|    Energy [meV/at]      |      Forces [meV/Å]     |
+|------------|------------|------------|------------|
+|     MAE    |    RMSE    |     MAE    |    RMSE    |
+|{data["mae_e_per_atom"].min()*1000:9.2f}   |{data["rmse_e_per_atom"].min()*1000:9.2f}   |{data["mae_f"].min()*1000:9.2f}   |{data["rmse_f"].min()*1000:9.2f}   |''',
+                 family='monospace', fontsize=8)
+
+    current_folder = os.getcwd().split("/")[-1]
+    plt.savefig(f"LC_{current_folder}.png", dpi=300)
     if args.show:
         plt.show()
     else:
-        subprocess.run(f"imgcat LC.png", shell=True)
+        subprocess.run(f"imgcat LC_{current_folder}.png", shell=True)
 
 
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _split_lines(self, text, width):
+        # Split the text into paragraphs separated by explicit newlines
+        paragraphs = text.split('\n')
+        # Wrap each paragraph, but preserve the newlines between them
+        wrapped_paragraphs = []
+        for p in paragraphs:
+            wrapped_paragraphs.extend(textwrap.wrap(p, width))
+        return wrapped_paragraphs
 
 class ArgumentParserWithDefaults(argparse.ArgumentParser):
     def add_argument(self, *args, help=None, default=None, **kwargs):
-        if help is not None:
-            kwargs["help"] = help
-        if default is not None and args[0] != "-h":
-            kwargs["default"] = default
-            if help is not None:
-                kwargs["help"] += f"\n{orange}Default: {default}{normal}"
-        super().add_argument(*args, **kwargs)
-
+        # If it's a store_true action, set default to False if not provided
+        if kwargs.get("action") == "store_true":
+            if default is None:
+                default = False
+        # Append default to help if both are provided and it's not the help argument
+        if help is not None and default is not None and args and args[0] != "-h":
+            kwargs["help"] = f"{help}\n{orange}Default: {default}{normal}"
+        # Always pass default to the parent class
+        super().add_argument(*args, default=default, **kwargs)
 
 def get_parser():
     """ The argument parser of the command-line version """
-    parser = ArgumentParserWithDefaults(formatter_class=argparse.RawTextHelpFormatter,
+    parser = ArgumentParserWithDefaults(formatter_class=CustomHelpFormatter,
     description=f"""
-{bold}{orange}Plot DeepMD or n2p2 learning curve.{normal}
+{bold}{orange}Plot DeepMD, n2p2, or ACE learning curves.{normal}
 """)
     parser.add_argument('--input', '-in',
-                    default=defaultinput,
-                    type=str, 
-                    help='Path to the learning curve file')
+                        default=defaultinput,
+                        type=str, 
+                        help='Path to the learning curve file')
     parser.add_argument('--log', '-l',
                         default=False,
                         action='store_true',

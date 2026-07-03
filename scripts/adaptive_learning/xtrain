@@ -1,0 +1,71 @@
+#!/bin/bash 
+
+# Create a training directory (<STEP>_TRAIN), prepare an n2p2 job script,
+# and optionally submit it with sbatch.
+
+if [ $# -ne 3 ]; then
+    echo "    Usage: $0 step_number input.data lauch_job"
+    echo "   step_number : number of the adaptive learning step (0 if first step)"
+    echo "   lanch job YES/NO"
+    exit 1
+fi
+
+DIR=$1_TRAIN
+inpdatfile=$2
+launch_job=$3
+
+mkdir ${DIR}
+echo "Training directory created: ${DIR}"
+
+NAPSDIR=$(which $0)
+NAPSDIR=${NAPSDIR%/*}
+
+nnode=$($NAPSDIR/read_input.sh input_AL NB_NODES_TRAIN)
+
+pat=$(pwd)
+
+if [ ! -f job.env ]; then
+    echo "job.env file not found, please create it with the necessary environment variables"
+    exit 1
+fi
+if [ ! -f n2p2.env ]; then
+    echo "n2p2.env file not found, please create it with the necessary N2P2 environment variables"
+    exit 1
+fi
+if [ ! -f input.nn ]; then
+    echo "input.nn file not found, please create it"
+    exit 1
+fi
+
+#create job for training
+# job.env provides the SLURM header; n2p2.env provides runtime env for n2p2.
+cat job.env n2p2.env > ${DIR}/job
+sed -i "s/NNODES/${nnode}/g" ${DIR}/job
+sed -i "s/jobname/jobtrain/g" ${DIR}/job
+
+echo "
+cd ${pat}/${DIR}
+
+# Build scaling.data and then run training.
+srun nnp-scaling 5 > scal.out
+srun nnp-train > train.out
+
+export PYTHONPATH=${NAPSDIR}:\$PYTHONPATH
+"  >> ${DIR}/job
+cat ${pat}/python.env >> ${DIR}/job
+
+# Plot learning curves at the end of training.
+echo "python ${NAPSDIR}/plotLC.py" >> ${DIR}/job
+
+chmod u+x ${DIR}/job
+
+cp ${inpdatfile} ${DIR}/input.data
+cp input.nn ${DIR}
+
+if [ "$launch_job" = "YES" ]; then
+    cd ${pat}/${DIR}
+    sbatch job
+    cd ..
+else
+    echo "Run the job with: cd ${DIR} && sbatch ./job"
+fi

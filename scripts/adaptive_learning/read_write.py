@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/softs/anaconda3/bin/python3
 
 """
 Collection of functions to read and write files in different formats.
@@ -12,7 +12,7 @@ import os
 from os.path import isfile
 import numpy as np
 import pandas as pd
-from ase import Atoms
+from ase import *
 from ase.io.lammpsdata import read_lammps_data
 from ase.io.lammpsrun import read_lammps_dump
 from ase.io.vasp import read_vasp_out, read_vasp
@@ -20,11 +20,13 @@ from ase.io import read as ase_read
 from ase.cell import Cell
 from ase.calculators.singlepoint import SinglePointCalculator
 import re
-from tqdm import tqdm
 from io import StringIO
 from ase.io.lammpsdata import Prism, convert
+from tqdm import tqdm
 
-numeric_const_pattern = r"[-+]?(?:(?: \d*\.\d+)|(?: \d+\.?))(?:[Ee][+-]?\d+)?"
+numeric_const_pattern = (
+    "[-+]? (?: (?: \d* \. \d+ ) | (?: \d+ \.? ) )(?: [Ee] [+-]? \d+ ) ?"
+)
 rx = re.compile(numeric_const_pattern, re.VERBOSE)
 
 orange = "\033[93m"
@@ -36,6 +38,7 @@ cener = 1.0 / 27.21138469
 cforce = cener / cdist
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 PT = pd.read_csv(
     StringIO("""1,Hydrogen,H,1.007,0,1,1,1,1,gas,,yes,,yes,,Nonmetal,0.79,2.2,13.5984,8.99E-05,14.175,20.28,3,Cavendish,1766,14.304,1,1
@@ -189,12 +192,13 @@ PT = pd.read_csv(
     ],
 )
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def get_symbol_from_mass(m):
     return PT.loc[np.abs(PT["AtomicMass"] - m) < 0.1, "Symbol"].values[0]
 
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def get_vel_CONTCAR(file: str = "CONTCAR") -> np.ndarray:
     """
@@ -209,107 +213,63 @@ def get_vel_CONTCAR(file: str = "CONTCAR") -> np.ndarray:
     if len(lines) - Natoms >= 9 + Natoms:
         # velocities are in the last block of lines
         lines = lines[10 + Natoms :]
-        for i, line in enumerate(lines):
-            Vel[i, :] = [float(x) * 1e3 for x in line.split()]
+        for i, l in enumerate(lines):
+            Vel[i, :] = [float(x) * 1e3 for x in l.split()]
     return Vel
 
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def read_xyz(filename, index=slice(None)):
+
+def iread_xyz(filename, index):
     """
-    Read a file in xyz format and return structures and comments for the specified slice.
-    Comment lines contain the cell parameters.
+    Read a file in xyz format and return the structure at index `index`
+    also read the comment line that have the cell parameters
     """
-    images = []
-    comments = []
-    current_block = 0
-    
-    # Handle slice parameters
-    start = index.start or 0
-    stop = index.stop or float('inf')
-    step = index.step or 1
-    
-    # Get file size for progress bar
-    import os
-    file_size = os.path.getsize(filename)
-    
     with open(filename, "r") as f:
-        with tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Reading {filename}", file=sys.stderr) as pbar:
-            while True:
-                pos_before = f.tell()
-                
-                # Read number of atoms line
-                line = f.readline()
-                if not line:  # End of file
-                    break
-                
-                line = line.strip()
-                if not line:
-                    pbar.update(f.tell() - pos_before)
-                    continue
-                
-                try:
-                    natoms = int(line)
-                except ValueError:
-                    pbar.update(f.tell() - pos_before)
-                    continue
-                
-                # Read comment/cell parameters line
-                comment_line = f.readline().strip()
-                
-                # Check if this block is in the desired slice
-                should_process = current_block in range(start, int(stop) if stop != float('inf') else current_block + 1)[::step]
-                
-                if should_process:
-                    cellparams = [float(i) for i in comment_line.split()]
-                    if len(cellparams) == 6:
-                        cell = Cell.fromcellpar(cellparams)
-                    else:
-                        cell = None
-                    
-                    symbols = []
-                    positions = []
-                
-                # Read atom lines
-                for _ in range(natoms):
-                    atom_line = f.readline()
-                    if should_process:
-                        parts = atom_line.split()[:4]
-                        symbol, x, y, z = parts
-                        symbol = symbol.lower().capitalize()
-                        symbols.append(symbol)
-                        positions.append([float(x), float(y), float(z)])
-                
-                # Create Atoms object only for processed blocks
-                if should_process:
-                    images.append(
-                        Atoms(
-                            symbols=symbols, 
-                            positions=positions, 
-                            cell=cell, 
-                            pbc=[True, True, True]
-                        )
-                    )
-                    comments.append(comment_line)
-                
-                current_block += 1
-                
-                # Update progress bar
-                pbar.update(f.tell() - pos_before)
-                
-                # Early exit if we've passed the stop point
-                if stop != float('inf') and current_block >= stop:
-                    break
-    
-    return images, comments
+        lines = f.readlines()
+    images = []
+    while len(lines) > 0:
+        symbols = []
+        positions = []
+        natoms = int(lines.pop(0))
+        cellparams = [float(i) for i in lines.pop(0).split()]
+        if len(cellparams) == 6:
+            cell = Cell.fromcellpar(cellparams)
+        else:
+            cell = None
+        for _ in range(natoms):
+            line = lines.pop(0)
+            symbol, x, y, z = line.split()[:4]
+            symbol = symbol.lower().capitalize()
+            symbols.append(symbol)
+            positions.append([float(x), float(y), float(z)])
+        images.append(
+            Atoms(
+                symbols=symbols, positions=positions, cell=cell, pbc=[True, True, True]
+            )
+        )
+    yield from images[index]
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def read_xyz(filename, index):
+    """
+    Read a file in xyz format and return the structure at index `index`
+    """
+    return [st for st in iread_xyz(filename, index)]
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def write_xyz(fileobj, images, fmt="%22.15f"):
     """
     Write a file in xyz format and add the cell parameters in the comment line
     """
-    for atoms in tqdm(enumerate(images), total=len(images), desc="Writing xyz file", file=sys.stderr):
+    for atoms in images:
         natoms = len(atoms)
         cell = atoms.cell.cellpar()
         cell = "    ".join([str(i) for i in cell])
@@ -317,303 +277,85 @@ def write_xyz(fileobj, images, fmt="%22.15f"):
         for s, (x, y, z) in zip(atoms.symbols, atoms.positions):
             fileobj.write("%-2s %s %s %s\n" % (s, fmt % x, fmt % y, fmt % z))
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def parse_ACEpickle(file_path, index=slice(None)):
-    try:
-        df = pd.read_pickle(file_path, compression='gzip')
-    except:
-        df = pd.read_pickle(file_path)
-    df = df.iloc[index]
-    atoms = []
-    comments = []
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Parsing ACE pickle file", unit="struct", file=sys.stderr):
-        struct = row['ase_atoms']
-        energy = row['energy']
-        forces = row['forces']
-        comment = row['name']
-        struct.calc = SinglePointCalculator(
-                    atoms=struct, forces=forces, energy=energy
-                )
-        atoms.append(struct)
-        comments.append(comment)
-    return atoms, comments
-    
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def atomsList2DataFrame(atoms, names):
-    data = {'name': [],
-            'energy': [],
-            'forces': [],
-            'ase_atoms': [],
-            'energy_corrected': [],
-            'energy_corrected_per_atom': []}
-    for struct, comment in zip(atoms, names):
-        data['name'].append(comment)
-        energy = struct.get_potential_energy()
-        data['energy'].append(energy)
-        data['forces'].append(struct.get_forces())
-        data['energy_corrected'].append(energy)
-        data['energy_corrected_per_atom'].append(energy / len(struct))
-        struct.calc = None
-        data['ase_atoms'].append(struct)
-    df = pd.DataFrame(data)
-    return df
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def save_pckl_gzip(atoms, comments, file_path):
-    data = atomsList2DataFrame(atoms, comments)
-    data.to_pickle(file_path, compression='gzip', protocol=4)
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+def write_lammps_traj(structure):
+    alpha, beta, gamma = structure[0].cell.angles()
+    if alpha != 90 or beta != 90 or gamma != 90:
+        for it, struc in enumerate(structure):
+            alpha, beta, gamma = structure[0].cell.angles()
+            a, b, c = structure[0].cell.cellpar()[:3]
+            xy = b * np.cos(np.radians(gamma))
+            xz = c * np.cos(np.radians(beta))
+            yz = (b * c * np.cos(np.radians(alpha)) - xy * xz) / np.sqrt(b**2 - xy**2)
+            sys.stdout.write(f"ITEM: TIMESTEP\n")
+            sys.stdout.write(f"{it}\n")
+            sys.stdout.write(f"ITEM: NUMBER OF ATOMS\n")
+            sys.stdout.write(f"{len(struc)}\n")
+            sys.stdout.write(f"ITEM: BOX BOUNDS xy xz yz pp pp pp\n")
+            sys.stdout.write(f"{0:15.9e} {a:15.9e} {xy:15.9e}\n")
+            sys.stdout.write(f"{0:15.9e} {b:15.9e} {xz:15.9e}\n")
+            sys.stdout.write(f"{0:15.9e} {c:15.9e} {yz:15.9e}\n")
+            if np.sum(struc.get_velocities()) == 0:
+                sys.stdout.write(f"ITEM: ATOMS id element x y z\n")
+                for i, (at, pos) in enumerate(
+                    zip(struc.get_chemical_symbols(), struc.positions)
+                ):
+                    x, y, z = pos
+                    sys.stdout.write(
+                        f"{i + 1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n"
+                    )
+            else:
+                sys.stdout.write(f"ITEM: ATOMS id element x y z vx vy vz\n")
+                for i, (at, pos, vel) in enumerate(
+                    zip(
+                        struc.get_chemical_symbols(),
+                        struc.positions,
+                        struc.get_velocities(),
+                    )
+                ):
+                    x, y, z = pos
+                    vx, vy, vz = vel
+                    sys.stdout.write(
+                        f"{i + 1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e} {vx:15.9e} {vy:15.9e} {vz:15.9e}\n"
+                    )
+    else:
+        for it, struc in enumerate(structure):
+            a, b, c = struc.cell.cellpar()[:3]
+            sys.stdout.write(f"ITEM: TIMESTEP\n")
+            sys.stdout.write(f"{it}\n")
+            sys.stdout.write(f"ITEM: NUMBER OF ATOMS\n")
+            sys.stdout.write(f"{len(struc)}\n")
+            sys.stdout.write(f"ITEM: BOX BOUNDS pp pp pp\n")
+            sys.stdout.write(f"{0:15.9e} {a:15.9e}\n")
+            sys.stdout.write(f"{0:15.9e} {b:15.9e}\n")
+            sys.stdout.write(f"{0:15.9e} {c:15.9e}\n")
+            if np.sum(struc.get_velocities()) == 0:
+                sys.stdout.write(f"ITEM: ATOMS id element x y z\n")
+                for i, (at, pos) in enumerate(
+                    zip(struc.get_chemical_symbols(), struc.positions)
+                ):
+                    x, y, z = pos
+                    sys.stdout.write(
+                        f"{i + 1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e}\n"
+                    )
+            else:
+                sys.stdout.write(f"ITEM: ATOMS id element x y z vx vy vz\n")
+                for i, (at, pos, vel) in enumerate(
+                    zip(
+                        struc.get_chemical_symbols(),
+                        struc.positions,
+                        struc.get_velocities(),
+                    )
+                ):
+                    x, y, z = pos
+                    vx, vy, vz = vel
+                    sys.stdout.write(
+                        f"{i + 1:>4d} {at:>2s} {x:15.9e} {y:15.9e} {z:15.9e} {vx:15.9e} {vy:15.9e} {vz:15.9e}\n"
+                    )
 
-def write_MACExyz(atoms, comments, file_path):
-    data = atomsList2DataFrame(atoms, comments)
-    with open(file_path, 'w') as f:
-        for _, row in tqdm(data.iterrows(), total=len(data), desc="Writing MACE xyz file", file=sys.stderr):
-            atoms = row['ase_atoms']
-            num_atoms = len(atoms)
-            pbcs = ' '.join(['T' if p else 'F' for p in atoms.get_pbc()])
-            lat = ' '.join([f"{x}" for x in atoms.get_cell().flatten()])
-            f.write(f"{num_atoms}\n")
-            f.write(f'Lattice="{lat}" Properties=species:S:1:pos:R:3:REF_forces:R:3 name={row["name"]} REF_energy={row["energy"]} pbc="{pbcs}"\n')
-            forces = row['forces']
-            for symbol, position, force in zip(atoms.get_chemical_symbols(), atoms.get_positions(), forces):
-                f.write(f"{symbol}{position[0]:17.8f}{position[1]:17.8f}{position[2]:17.8f}{force[0]:17.8f}{force[1]:17.8f}{force[2]:17.8f}\n")
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def parse_MACExyz(file_path, index=slice(None)):
-    atoms = []
-    comments = []
-    current_block = 0
-    
-    # Handle slice parameters
-    start = index.start or 0
-    stop = index.stop or float('inf')
-    step = index.step or 1
-    
-    # Get file size for progress bar
-    file_size = os.path.getsize(file_path)
-    
-    with open(file_path, 'r') as f:
-        with tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Reading {file_path}", file=sys.stderr) as pbar:
-            while True:
-                pos_before = f.tell()
-                
-                # Read number of atoms line
-                line = f.readline()
-                if not line:  # End of file
-                    break
-                
-                line = line.strip()
-                if not line:
-                    pbar.update(f.tell() - pos_before)
-                    continue
-                
-                # Check if this block is in the desired slice
-                should_process = current_block in range(start, int(stop) if stop != float('inf') else current_block + 1)[::step]
-                
-                try:
-                    num_atoms = int(line)
-                except ValueError:
-                    pbar.update(f.tell() - pos_before)
-                    continue
-                
-                # Read lattice/properties line
-                lattice_line = f.readline().strip()
-                
-                if should_process:
-                    # Parse metadata
-                    lattice_str = lattice_line.split('Lattice="')[1].split('"')[0]
-                    name = lattice_line.split('name=')[1].split(' category=')[0].strip('"')
-                    category_split = lattice_line.split('category=')
-                    if len(category_split) > 1:
-                        category = category_split[1].split(' ')[0].strip('"')
-                    else:
-                        category = 'unknown_category'
-                    energy = float(lattice_line.split('energy=')[1].split(' ')[0])
-                    pbc = [s.strip() == 'T' for s in lattice_line.split('pbc="')[1].strip('"').split()]
-                    
-                    # Parse lattice
-                    lattice = np.array(lattice_str.split()).reshape(3, 3).astype(float)
-                    
-                    # Initialize arrays
-                    forces = []
-                    positions = []
-                    symbols = []
-                
-                # Read atom lines
-                for _ in range(num_atoms):
-                    atom_line = f.readline().strip()
-                    if should_process:
-                        atom_data = atom_line.split()
-                        symbol = atom_data[0]
-                        x, y, z = map(float, atom_data[1:4])
-                        fx, fy, fz = map(float, atom_data[4:7])
-                        symbols.append(symbol)
-                        positions.append([x, y, z])
-                        forces.append([fx, fy, fz])
-                
-                # Create ASE Atoms object only for processed blocks
-                if should_process:
-                    struct = Atoms(symbols=symbols, 
-                                   positions=positions, 
-                                   cell=lattice, 
-                                   pbc=pbc)
-                    struct.calc = SinglePointCalculator(
-                                atoms=struct, forces=forces, energy=energy
-                            )
-                    comment = f"{category}, {name}"
-                    atoms.append(struct)
-                    comments.append(comment)
-                
-                current_block += 1
-                
-                # Update progress bar
-                pbar.update(f.tell() - pos_before)
-                
-                # Early exit if we've passed the stop point
-                if stop != float('inf') and current_block >= stop:
-                    pbar.update(file_size - f.tell())  # Complete the bar
-                    break
-    
-    return atoms, comments
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-def write_lammps_traj(structure, outfile=sys.stdout, energies=False, forces=False, allotrope=False):
-    """Write a list of ASE Atoms objects to a LAMMPS trajectory file.
-
-    Parameters
-    ----------
-        structure (list of Atoms): List of ASE Atoms objects to write.
-        outfile (str or file-like, optional): Output file path or file-like object. Default is sys.stdout.
-        energies (list or None, optional): List of energies corresponding to each Atoms object. Default is None.
-        forces (list or None, optional): List of forces corresponding to each Atoms object. Default is None.
-        allotrope (bool, optional): Whether to include allotrope information. Default is False.
-    """
-    if not structure:
-        sys.stderr.write("Warning: Empty structure provided.\n")
-        return
-    
-    if outfile != sys.stdout:
-        outfile = open(outfile, "w")
-    
-    for it, struc in tqdm(enumerate(structure), total=len(structure), 
-                        desc="Writing lammpstrj file", file=sys.stderr):
-        
-        # Get cell vectors (3x3 matrix where each row is a vector)
-        cell_matrix = struc.cell.array
-        
-        allotrope_info = ['']*len(struc)
-        if allotrope:
-            allotrope_data = struc.arrays.get('allotrope', None)
-            if allotrope_data is not None:
-                if isinstance(allotrope_data, (list, np.ndarray)) and len(allotrope_data) == len(struc):
-                    allotrope_info = [al if al != '0' else '' for al in allotrope_data]
-                else:
-                    sys.stderr.write(f"Warning: 'allotrope' array is missing or malformed for structure {it}. Using empty strings.\n")
-        
-        outfile.write("ITEM: TIMESTEP\n")
-        outfile.write(f"{it}\n")
-        outfile.write("ITEM: NUMBER OF ATOMS\n")
-        outfile.write(f"{len(struc)}\n")
-        
-        # Check if orthogonal
-        a, b, c, alpha, beta, gamma = struc.cell.cellpar()
-        
-        if not (np.isclose(alpha, 90) and np.isclose(beta, 90) and np.isclose(gamma, 90)):
-            # Convert to LAMMPS lower-triangular format
-            # LAMMPS expects:
-            #   a = (lx, 0, 0)
-            #   b = (xy, ly, 0)  
-            #   c = (xz, yz, lz)
-            
-            a_vec = cell_matrix[0]
-            b_vec = cell_matrix[1]
-            c_vec = cell_matrix[2]
-            
-            # Calculate LAMMPS box parameters
-            lx = np.linalg.norm(a_vec)
-            xy = np.dot(b_vec, a_vec) / lx
-            ly = np.sqrt(np.dot(b_vec, b_vec) - xy**2)
-            xz = np.dot(c_vec, a_vec) / lx
-            yz = (np.dot(b_vec, c_vec) - xy * xz) / ly
-            lz = np.sqrt(np.dot(c_vec, c_vec) - xz**2 - yz**2)
-            
-            # LAMMPS bounds format: xlo xhi xy, ylo yhi xz, zlo zhi yz
-            outfile.write("ITEM: BOX BOUNDS xy xz yz pp pp pp\n")
-            outfile.write(f"{0.0:15.9e} {lx:15.9e} {xy:15.9e}\n")
-            outfile.write(f"{0.0:15.9e} {ly:15.9e} {xz:15.9e}\n")
-            outfile.write(f"{0.0:15.9e} {lz:15.9e} {yz:15.9e}\n")
-            
-            # Build LAMMPS cell in lower triangular form
-            lammps_cell = np.array([
-                [lx, 0.0, 0.0],
-                [xy, ly, 0.0],
-                [xz, yz, lz]
-            ])
-            
-            # Transform positions: new_pos = old_pos @ (old_cell^-1 @ new_cell)^T
-            # This maps fractional coordinates through the new cell
-            transform = lammps_cell @ np.linalg.inv(cell_matrix)
-            positions = struc.positions @ transform.T
-            
-        else:
-            # Orthogonal box
-            outfile.write("ITEM: BOX BOUNDS pp pp pp\n")
-            outfile.write(f"{0.0:15.9e} {a:15.9e}\n")
-            outfile.write(f"{0.0:15.9e} {b:15.9e}\n")
-            outfile.write(f"{0.0:15.9e} {c:15.9e}\n")
-            positions = struc.positions
-        
-        strvel = "" if np.sum(np.abs(struc.get_velocities())) < 1e-10 else " vx vy vz"
-        stre = ""
-        if energies:
-            stre = " c_pe" if energies else ""
-            Es = struc.get_potential_energies()
-        strf = ""
-        if forces:
-            strf = " fx fy fz"
-            Fs = struc.forces()
-        velstr = ''
-        c_pestr = ''
-        f_str = ''
-        # Write atomic coordinates
-        outfile.write(f"ITEM: ATOMS id element x y z{strvel}{stre}{strf}\n")
-        if np.sum(np.abs(struc.get_velocities())) > 1e-10:
-            velocities = struc.get_velocities()
-            if not (np.isclose(alpha, 90) and np.isclose(beta, 90) and np.isclose(gamma, 90)):
-                velocities = velocities @ transform.T
-        for i, (at, pos, info) in enumerate(
-                zip(struc.get_chemical_symbols(), positions, allotrope_info)
-            ):
-                x, y, z = pos
-                if np.sum(np.abs(struc.get_velocities())) > 1e-10:
-                    vx, vy, vz = velocities[i]
-                    velstr = f" {vx:12.6e} {vy:12.6e} {vz:12.6e}"
-                if energies:
-                    try:
-                        energy_value = float(Es[i])
-                        c_pestr = f" {energy_value:12.6e}"
-                    except (ValueError, TypeError):
-                        c_pestr = ""
-                else:
-                    c_pestr = ""
-                if forces:
-                    try:
-                        fx, fy, fz = Fs[i]
-                        f_str = f" {fx:12.6e} {fy:12.6e} {fz:12.6e}"
-                    except (ValueError, TypeError, IndexError):
-                        f_str = ""
-                outfile.write(
-                    f"{i + 1:>4d} {at:>2s}{info} {x:12.6e} {y:12.6e} {z:12.6e}{velstr}{c_pestr}{f_str}\n"
-                )
-    
-    if outfile != sys.stdout:
-        outfile.close()
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -649,108 +391,98 @@ def write_inputdata(atoms, comments, rmFE=False):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def read_inputdata(filename: str, index=slice(None)):
-    """
-    Read input.data file and return a list of Atoms objects and the comments for the specified slice.
-    """
-    atoms = []
-    comments = []
-    current_block = 0
-    block_lines = []
-    in_block = False
-    file_size = os.path.getsize(filename)
 
-    with open(filename, 'r') as f:
-        with tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Reading {filename}", file=sys.stderr) as pbar:
-            while True:
-                pos_before = f.tell()
-                line = f.readline()
-                
-                if not line:  # End of file
-                    break
-                
-                line = line.strip()
-                
-                if line == 'begin':
-                    in_block = True
-                    block_lines = [line]
-                elif line == 'end':
-                    in_block = False
-                    block_lines.append(line)
-                    # Only process blocks in the desired slice
-                    start = index.start or 0
-                    stop = index.stop or float('inf')
-                    step = index.step or 1
-                    
-                    if current_block in range(start, int(stop) if stop != float('inf') else current_block + 1)[::step]:
-                        # Parse the block
-                        lattice = []
-                        pos = []
-                        forces = []
-                        symb = []
-                        comment = None
-                        for block_line in block_lines:
-                            if 'lattice' in block_line:
-                                lattice.append([float(x)/cdist for x in block_line.split()[1:4]])
-                            elif 'comment' in block_line:
-                                comment = block_line.split('comment ')[1].strip()
-                            elif 'atom' in block_line:
-                                _, x, y, z, symbol, _, _, fx, fy, fz = block_line.split()
-                                symbol = symbol.lower().capitalize()
-                                symb.append(symbol)
-                                pos.append([float(x) / cdist, 
-                                            float(y) / cdist, 
-                                            float(z) / cdist])
-                                forces.append(
-                                    [float(fx) / cforce, 
-                                     float(fy) / cforce, 
-                                     float(fz) / cforce]
-                                )
-                            elif 'energy' in block_line:
-                                energy = float(block_line.split()[1]) / cener
-                        # Create Atoms object
-                        at = Atoms(symbols=symb,
-                                   positions=np.array(pos),
-                                   cell=np.array(lattice), 
-                                   pbc=True)
-                        at.calc = SinglePointCalculator(
-                                        atoms=at, 
-                                        forces=forces, 
-                                        energy=energy
-                                    )
-                        atoms.append(at)
-                        comments.append(comment)
-                    block_lines = []
-                    current_block += 1
-                    
-                    # Early exit if we've passed the stop point
-                    if stop != float('inf') and current_block >= stop:
-                        pbar.update(file_size - pos_before)  # Complete the bar
-                        break
-                elif in_block:
-                    block_lines.append(line)
-                
-                # Update progress bar
-                pbar.update(f.tell() - pos_before)
-                
-    return atoms, comments
+def write_inpdat(atoms, outfile, comments, rmFE=False):
+    """
+    From a list of Atoms object and comments, write an input.data file to `filename`.
+    """
+    outf = open(outfile, "w")
+    for atom, comment in zip(atoms, comments):
+        a, b, c = atom.get_cell() * cdist  # convert Å to Bohr
+        if atom.calc is not None and rmFE == False:
+            forces = np.array(atom.get_forces())
+            energy = atom.get_potential_energy()
+            energy *= cener  # convert eV to Hartree
+            forces *= cforce  # convert eV/Å to Hartree/Bohr
+        else:
+            forces = np.zeros_like(atom.positions)
+            energy = 0.0
+        outf.write(f"begin\n")
+        outf.write(f"comment {comment}\n")
+        outf.write(f"lattice {a[0]:22.14e} {a[1]:22.14e} {a[2]:22.14e}\n")
+        outf.write(f"lattice {b[0]:22.14e} {b[1]:22.14e} {b[2]:22.14e}\n")
+        outf.write(f"lattice {c[0]:22.14e} {c[1]:22.14e} {c[2]:22.14e}\n")
+        for at, pos, (fx, fy, fz) in zip(
+            atom.get_chemical_symbols(), atom.positions, forces
+        ):
+            x, y, z = pos * cdist  # convert Å to Bohr
+            outf.write(
+                f"atom {x:22.14e} {y:22.14e} {z:22.14e} {at:s} {'0.0':s} {'0.0':s} {fx:22.14e} {fy:22.14e} {fz:22.14e}\n"
+            )
+        outf.write(f"energy {energy:22.14e}\n")
+        outf.write(f"charge 0\n")
+        outf.write("end\n")
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def iread_inputdata(filename, index):
+    """
+    Read input.data file and return a list of Atoms objects and the comments
+    """
+    images = []
+    with open(filename, "r") as f:
+        for line in f:
+            if "begin" in line:
+                lattice = []
+                symbols = []
+                positions = []
+                forces = []
+            if "lattice" in line:
+                lattice.append([float(i) / cdist for i in line.split()[1:]])
+            if "atom" in line:
+                _, x, y, z, symbol, _, _, fx, fy, fz = line.split()
+                symbol = symbol.lower().capitalize()
+                symbols.append(symbol)
+                positions.append([float(x) / cdist, float(y) / cdist, float(z) / cdist])
+                forces.append(
+                    [float(fx) / cforce, float(fy) / cforce, float(fz) / cforce]
+                )
+            if "energy" in line:
+                energy = float(line.split()[1]) / cener
+            if "end" in line:
+                atoms = Atoms(
+                    symbols=symbols,
+                    positions=positions,
+                    cell=lattice,
+                    pbc=[True, True, True],
+                )
+                atoms.calc = SinglePointCalculator(
+                    atoms=atoms, forces=forces, energy=energy
+                )
+                images.append(atoms)
+    yield from images[index]
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def read_inputdata(filename, index):
+    """
+    Read a file in n2p2 format and return the structure at index `index`
+    """
+    return [st for st in iread_inputdata(filename, index)]
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def compute_velocities(atoms, dt=1.0):
     """
     Compute velocities from the positions of the atoms at two different times.
     dt is the time difference between the two snapshots, in fs.
     Velocities units: Å/ps
-    
-    Parameters
-    ----------
-        atoms (list): List of ASE Atoms objects
-        dt (float): Time difference between snapshots in fs
-    
-    Returns
-    -------
-        atoms (list): List of ASE Atoms objects with velocities set
     """
     if len(atoms) < 2:
         sys.stderr.write(
@@ -804,7 +536,9 @@ def compute_velocities(atoms, dt=1.0):
         atoms[0].set_velocities(vel)
         return [atoms[0]]
 
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def parse_slice(value):
     """
@@ -829,6 +563,9 @@ def parse_slice(value):
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
 def write_lammps(
     name,
     atoms,
@@ -838,24 +575,22 @@ def write_lammps(
     velocities: np.ndarray = None,
 ):
     """Write atomic structure data to a LAMMPS data file.
-    
-    Parameters
-    ----------
-        name (str): Name of the output file
-        atoms (Atom object): ASE Atom object
-        units (str): LAMMPS units style
-        atom_style (str): LAMMPS atom style
-        velocities (array): In case we want to add a initial velocities to the structure.
-    
-    Returns
-    -------
-        None
+    #### Parameters
+    name      : str
+        Name of the output file
+    atoms     : Atom object
+        ASE Atom object
+    units     : str
+        LAMMPS units style
+    atom_style: str
+        LAMMPS atom style
+    velocities: array (N by 3)
+        In case we want to add a initial velocities to the structure.
     """
-    if name is None:
+    if name == None:
         fd = sys.stdout
     else:
-        if os.path.dirname(name) != "":
-            os.makedirs(os.path.dirname(name), exist_ok=True)
+        os.makedirs(os.path.dirname(name), exist_ok=True)
         fd = open(name, "w")
         comments = name
 
@@ -979,7 +714,7 @@ def write_lammps(
     else:
         raise NotImplementedError
 
-    if isinstance(velocities, np.ndarray):
+    if type(velocities) == np.ndarray:
         if velocities.shape[0] == len(atoms):
             # atom_style is atomic by default
             # velocity in metal unit in lammps : Angstroms/picosecond
@@ -1006,33 +741,33 @@ def write_lammps(
     if fd is not sys.stdout:
         fd.close()
 
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 
 def read(filename: str, slice: str, cv=False, dt=1.0) -> list:
     """
     Wrapper function to read a file and return the structure at index `index`.
     Returns a list of Atoms objects and the type of structure read.
 
-    Parameters
-    ----------
-        filename (str): Name of the input file
-        slice (str): Slice of the structures to read, in the form `start:stop:step` or a single integer. If empty, all structures are read.
-        cv (bool): If True, compute velocities from the positions of the atoms at two different times.
-        dt (float): Time difference between the two snapshots, in fs.
+    #### Parameters
+    filename : str
+        Name of the input file
+    slice    : str
+        Slice of the structures to read, in the form `start:stop:step` or a single integer.
+        If empty, all structures are read.
+    cv       : bool
+        If True, compute velocities from the positions of the atoms at two different times.
+        dt is the time difference between the two snapshots, in fs.
+        Velocities units: Å/ps
+    dt       : float
+        Time difference between the two snapshots, in fs.
 
-    Returns
-    -------
-        struc (list): List of Atoms objects
-        structype (str): Type of structure read (POSCAR, OUTCAR, lammps, lammpstrj, xyz, traj, n2p2)
-        comments (list): List of comments for each structure
-    
-    Examples
-    --------
-    ```python
-        struc, structype, comments = read("POSCAR", ":")
-        struc, structype, comments = read("OUTCAR", "0:10:2")
-        struc, structype, comments = read("data.lammps", "5")
-    ```
+    #### Returns
+    struc    : list
+        List of Atoms objects
+    structype: str
+        Type of structure read (POSCAR, OUTCAR, lammps, lammpstrj, xyz, traj, n2p2)
     """
     slice = parse_slice(slice)
 
@@ -1049,15 +784,13 @@ def read(filename: str, slice: str, cv=False, dt=1.0) -> list:
     if not isfile(filename):
         sys.stderr.write(f"\n{bold}{orange}{filename} file does not exist!{normal}\n\n")
         sys.exit()
-    sys.stderr.write(f"Reading {filename}...")
+    sys.stderr.write(f"Reading {filename}... \n")
     sys.stderr.flush()
     if "POSCAR" in filename or "CONTCAR" in filename:
         struc = [read_vasp(filename)]
-        comments = [f"{filename} {i}" for i in range(len(struc))]
         structype = "POSCAR"
     elif n2p2 == 0:
-        struc = [read_lammps_data(filename, atom_style="atomic")]
-        comments = [f"{filename} {i}" for i in range(len(struc))]
+        struc = [read_lammps_data(filename, style="atomic")]
         structype = "lammps"
         # get correct symbols from atomic masses
         for i, atom in enumerate(struc):
@@ -1066,32 +799,19 @@ def read(filename: str, slice: str, cv=False, dt=1.0) -> list:
             atom.set_chemical_symbols(symbols)
     elif "OUTCAR" in filename:
         struc = read_vasp_out(filename, index=slice)
-        comments = [f"{filename} {i}" for i in range(len(struc))]
         structype = "OUTCAR"
     elif ".lammpstrj" in filename:
         struc = read_lammps_dump(filename, index=slice)
-        comments = [f"{filename} {i}" for i in range(len(struc))]
         structype = "lammpstrj"
     elif ".xyz" in filename:
-        with open(filename, "r") as f:
-            first_line = f.readline()
-            second_line = f.readline()
-        if "Lattice=" in second_line:
-            struc, comments = parse_MACExyz(filename, index=slice)
-            structype = "MACExyz"
-        else:
-            struc = read_xyz(filename, index=slice)
-            structype = "xyz"
+        struc = read_xyz(filename, index=slice)
+        structype = "xyz"
     elif ".traj" in filename:
         struc = ase_read(filename, index=slice)
-        comments = [f"{filename} {i}" for i in range(len(struc))]
         structype = "traj"
     elif n2p2 == 1 or ".inp" in filename:
-        struc, comments = read_inputdata(filename, index=slice)
+        struc = read_inputdata(filename, index=slice)
         structype = "n2p2"
-    elif ".pckl.gzip" in filename or ".pckl" in filename:
-        struc, comments = parse_ACEpickle(filename, index=slice)
-        structype = "ACEpckl"
     else:
         raise ValueError(f"""{bold}{orange}
 Unknown input file format!
@@ -1101,17 +821,8 @@ Name must contain either:
 - '.lammpstrj' for lammps trajectory files
 - '.xyz' for xyz trajectory files
 - '.traj' for ASE trajectory files
-- '.xyz' for MACE datasets
-- '.pckl.gzip' for ACE datasets
-- '.pckl' for ACE datasets
 {normal}
 """)
-    sys.stderr.write(f"""
-Format  : {orange}{bold}{structype}{normal}
-N images: {orange}{bold}{len(struc)}{normal}
-
-""")
-    sys.stderr.flush()
 
     if not isinstance(struc, list):
         struc = [struc]
@@ -1123,4 +834,4 @@ N images: {orange}{bold}{len(struc)}{normal}
         vel = get_vel_CONTCAR(filename)
         struc[0].set_velocities(vel)
 
-    return struc, structype, comments
+    return struc, structype

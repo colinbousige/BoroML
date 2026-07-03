@@ -1835,7 +1835,8 @@ with controls_col.expander(":material/trending_down: MD Quench", expanded=False)
         captionplace.caption(
             f"""{nsteps}-step NVT quench (1 fs) from {t_start} K to {t_end} K.
 
-**DO NOT RUN ON STREAMLIT.IO**. Launch this only on your own machine or HPC cluster.
+:red[:material/warning: **DO NOT RUN ON STREAMLIT.IO** :material/warning:]  
+:red[Launch this only on your own machine or HPC cluster.]
 
 It is recommended to quench or minimize large structures using your own HPC facilities for better performance. The quench implemented here is intended for quick tests on small structures, and may not be efficient for large systems or long runs."""
         )

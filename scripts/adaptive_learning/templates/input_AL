@@ -1,0 +1,66 @@
+# Example input_AL for NAPS_05032026
+# One parameter per line: KEY value1 value2 ...
+# Lines starting with # are ignored.
+
+# Optional indirection to env files (used by some scripts)
+# PYTHON_ENV: shell file sourced before python helper commands.
+PYTHON_ENV python.env
+# JOB_ENV: SLURM header template file (contains NNODES and jobname placeholders).
+JOB_ENV job.env
+# LAMMPS_ENV: shell file sourced before launching LAMMPS jobs.
+LAMMPS_ENV lammps.env
+# VASP_ENV: shell file sourced before launching VASP jobs.
+VASP_ENV vasp.env
+# N2P2_ENV: shell file sourced before launching n2p2 training jobs.
+N2P2_ENV n2p2.env
+
+# Active learning
+# NB_NODES_AL: number of nodes requested for the master AL job.
+NB_NODES_AL 4
+# STOCK_FILE_SIZE: number of structures per stock*.data chunk after split.
+STOCK_FILE_SIZE 500
+# NB_NNP: number of NNP models used in committee (expects input1.nn ... inputN.nn).
+NB_NNP 2
+# NADD: number of structures added to dataset at each AL iteration.
+NADD 30
+# NNP_ELEMENTS: ordered element symbols used by conversion/extraction scripts.
+NNP_ELEMENTS B Ag
+# NB_AL_CYCLES: number of AL loops executed in <STEP>_job_al.
+NB_AL_CYCLES 50
+
+# Standalone/final training
+# NNP_FILE_TRAIN: default NNP input filename for training stage metadata.
+NNP_FILE_TRAIN input.nn
+# NB_NODES_TRAIN: number of nodes requested by xtrain-generated training job.
+NB_NODES_TRAIN 1
+
+# MD tests
+# TEMP: one value => fixed-T MD; 2+ values => ramp from min(TEMP) to max(TEMP).
+TEMP 300 1000
+# MAX_EW: extrapolation-warning threshold value injected in LAMMPS input.
+MAX_EW 10
+# CELL_VAR_X: list of box-scale variations (%) along X.
+CELL_VAR_X -2 0 2
+# CELL_VAR_Y: list of box-scale variations (%) along Y.
+CELL_VAR_Y -2 0 2
+# CELL_VAR_Z: list of box-scale variations (%) along Z.
+CELL_VAR_Z 0
+# LAMMPS_INPUT: LAMMPS instruction/input script filename.
+# Default template available in repository: scripts/adaptive_learning/templates/input.lmp
+LAMMPS_INPUT input.lmp
+# LAMMPS_DAT_FILES: one or more LAMMPS structure/data files for MD tests.
+LAMMPS_DAT_FILES structure_Ag111.data
+# EW2VASP: number of EW structures extracted per MD output for DFT.
+EW2VASP 50
+# NSTEPS_B2EW: stride/step used when selecting EW structures from trajectories.
+NSTEPS_B2EW 10
+
+# DFT recomputation of extrapolative structures
+# NB_NODES_DFT: number of nodes requested for VASP jobs.
+NB_NODES_DFT 2
+
+# New stock generation
+# NSTRUCT_DUMP: number of structures taken from dump trajectories.
+NSTRUCT_DUMP 200
+# NSTRUCT_RAND: number of base structures used to build random perturbations.
+NSTRUCT_RAND 40
