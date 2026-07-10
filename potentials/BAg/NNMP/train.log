@@ -1,0 +1,18 @@
+INFO:root:creating directories...
+INFO:root:Creation of physical model
+INFO:root:Creation of trainer
+INFO:root:Creation of histograms for data
+INFO:root:Load best recorded loss
+INFO:root:Trying to load the best check point
+INFO:root:Begin training
+INFO:root:Begin test on all training data & all validation ones
+INFO:root:That'a all. Good bye
+INFO:root:creating directories...
+INFO:root:Creation of physical model
+INFO:root:Creation of trainer
+INFO:root:Creation of histograms for data
+INFO:root:Load best recorded loss
+INFO:root:Trying to load the best check point
+INFO:root:Begin training
+INFO:root:Begin test on all training data & all validation ones
+INFO:root:That'a all. Good bye

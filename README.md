@@ -29,7 +29,7 @@ Please [cite these articles](#how-to-cite) if you use any of the files in this a
 ## Contents of this archive
 
 - [borocreator](https://github.com/colinbousige/BoroML/tree/main/borocreator): Streamlit GUI tool to build and visualize borophene structures, run DeePMD relaxation, and export structures in various formats. You can also use the [online app](https://borocreator.streamlit.app/)
-- [potential](https://github.com/colinbousige/BoroML/tree/main/potential): The potential files for the n2p2, DeePMD and NNMP MLIPs
+- [potentials](https://github.com/colinbousige/BoroML/tree/main/potentials): The potential files for the n2p2, DeePMD and NNMP MLIPs for borophene on silver and gold.
 - [lammps](https://github.com/colinbousige/BoroML/tree/main/lammps): Sample LAMMPS input files for launching an MD simulation with the n2p2, DeePMD and NNMP MLIPs
 - [scripts](https://github.com/colinbousige/BoroML/tree/main/scripts): Various scripts used for post-treating the data or generating structures
 - [classification](https://github.com/colinbousige/BoroML/tree/main/classification): Script for finding vacancies and classifying borophene structures
@@ -107,7 +107,7 @@ Especially the `xjobactive` and `active_learning/SlurmJob.py` scripts where some
 
 ## How to cite
 
-Please cite the following articles if you use any of the files in this archive (click to see the bibtex entry):
+Please cite the following articles if you use any of the files in this archive (click to see the `bibtex` entry):
 
 <details> <summary> <i>"Neural network approach for a rapid prediction of metal-supported borophene properties"</i>, P. Mignon, A.R. Allouche, N.R. Innis, and C. Bousige, <a href="https://doi.org/10.1021/jacs.3c11549"><i>J. Am. Chem. Soc.</i> <b>145</b> (2023), 27857-27866</a> </summary>
 
@@ -143,9 +143,10 @@ Please cite the following articles if you use any of the files in this archive (
 
 </details>
 
-## Author
+## Authors
 
-[Colin BOUSIGE](mailto:colin.bousige@cnrs.fr), CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
+- [Colin BOUSIGE](mailto:colin.bousige@cnrs.fr), CNRS, [Laboratoire des Multimatériaux et Interfaces](http://lmi.cnrs.fr), Lyon, France
+- [Pierre MIGNON](mailto:pierre.mignon@univ-lyon1.fr), Université Lyon 1, [Institut Lumière Matière](http://www.ilm.univ-lyon1.fr), Lyon, France
 
 ## License
 
